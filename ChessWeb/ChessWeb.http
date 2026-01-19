@@ -1,0 +1,11 @@
+@ChessWeb_HostAddress = http://localhost:5222
+
+GET {{ChessWeb_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{ChessWeb_HostAddress}}/todos/1
+Accept: application/json
+
+###
