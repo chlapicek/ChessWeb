@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Http.HttpResults;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
+// enable automatic Kestrel HTTPS configuration for https:// addresses
+builder.WebHost.UseKestrelHttpsConfiguration();
+
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
