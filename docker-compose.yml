@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    image: chessweb-backend:dev
+    ports:
+      - "53104:8080"        # maps host 53104 -> container 8080 (backend EXPOSE 8080)
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      # Example connection string environment variable; update key/name to match your app's configuration
+      - ConnectionStrings__DefaultConnection=Server=db,1433;Database=ChessWebDb;User Id=sa;Password=Your_strong_password1;
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    image: chessweb-frontend:dev
+    ports:
+      - "3000:80"          # browse http://localhost:3000 to reach the frontend
+    depends_on:
+      - backend
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=Your_strong_password1   # change to a strong password for any real use
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$${SA_PASSWORD}\" -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      retries: 10
+      timeout: 5s
+
+volumes:
+  mssql-data:

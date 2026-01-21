@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="src\tests\" />
     <Folder Include="tests\" />
   </ItemGroup>
   
