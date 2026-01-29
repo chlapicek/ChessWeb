@@ -1,22 +1,36 @@
-# Multi-stage build for a React frontend (Create React App or similar)
+# =========================
+# Build stage
+# =========================
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Install basic build tools for native modules if needed
+# Install build tools for native modules if needed
 RUN apk add --no-cache python3 make g++
 
-# Copy package manifests (package-lock.json optional)
+# Copy package manifests
 COPY package*.json ./
 
-# Use npm ci if lockfile exists, otherwise fall back to npm install
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# Install dependencies (legacy-peer-deps is safer for Docker builds)
+RUN if [ -f package-lock.json ]; then npm ci --legacy-peer-deps; else npm install --legacy-peer-deps; fi
 
-# Copy source and build
+# Copy source files
 COPY . .
+
+# Build Vite frontend
 RUN npm run build
 
-# Serve with nginx
+# =========================
+# Runtime stage (serve with Nginx)
+# =========================
 FROM nginx:stable-alpine AS final
-COPY --from=build /app/build /usr/share/nginx/html
+WORKDIR /usr/share/nginx/html
+
+# Copy built static files from Vite
+COPY --from=build /app/dist ./
+
+
+# Expose port 80
 EXPOSE 80
+
+# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
