@@ -1,0 +1,7 @@
+# Ignore build artifacts
+bin/
+obj/
+
+# Include project files
+!*.csproj
+!*.cs
