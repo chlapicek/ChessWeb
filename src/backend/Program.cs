@@ -81,7 +81,11 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 .AddDefaultTokenProviders();
 
 // 3. JWT Authentication & Authorization
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "super_secret_chess_web_key_1234567890!#*?_very_secure_jwt_token_key";
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("Jwt:Key configuration is required.");
+}
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "ChessWebAPI";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "ChessWebClient";
 

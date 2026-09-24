@@ -16,7 +16,7 @@ public class JwtServiceTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Jwt:Key"] = "super_secret_chess_web_key_1234567890!#*?",
+                ["Jwt:Key"] = "test-signing-key-that-is-only-for-tests-1234567890",
                 ["Jwt:Issuer"] = "ChessWebAPI",
                 ["Jwt:Audience"] = "ChessWebClient",
                 ["Jwt:DurationInMinutes"] = "60"

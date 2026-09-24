@@ -22,9 +22,20 @@ public class JwtService : IJwtService
         _config = config;
     }
 
+    private string GetRequiredJwtKey()
+    {
+        var secretKey = _config["Jwt:Key"];
+        if (string.IsNullOrWhiteSpace(secretKey))
+        {
+            throw new InvalidOperationException("Jwt:Key configuration is required.");
+        }
+
+        return secretKey;
+    }
+
     public string GenerateToken(ApplicationUser user, IEnumerable<string> roles)
     {
-        var secretKey = _config["Jwt:Key"] ?? "super_secret_chess_web_key_1234567890!#*?";
+        var secretKey = GetRequiredJwtKey();
         var issuer = _config["Jwt:Issuer"] ?? "ChessWebAPI";
         var audience = _config["Jwt:Audience"] ?? "ChessWebClient";
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
@@ -59,7 +70,7 @@ public class JwtService : IJwtService
 
     public ClaimsPrincipal? GetPrincipalFromToken(string token)
     {
-        var secretKey = _config["Jwt:Key"] ?? "super_secret_chess_web_key_1234567890!#*?";
+        var secretKey = GetRequiredJwtKey();
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateAudience = false,
