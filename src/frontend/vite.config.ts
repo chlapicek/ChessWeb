@@ -6,14 +6,26 @@ import path from "path";
 export default defineConfig({
   plugins: [
     react(),
-    tailwind() // <-- add Tailwind plugin here
+    tailwind()
   ],
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: "./src/test/setup.ts",
+  },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"), // path alias
+      "@": path.resolve(__dirname, "./src"),
     },
   },
-  css: {
-    postcss: {}, // optional, but ensures Tailwind works
+  server: {
+    port: 3000,
+    host: "localhost",
+    proxy: {
+      "/api": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
 });

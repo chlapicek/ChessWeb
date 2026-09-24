@@ -25,9 +25,11 @@ RUN npm run build
 FROM nginx:stable-alpine AS final
 WORKDIR /usr/share/nginx/html
 
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Copy built static files from Vite
 COPY --from=build /app/dist ./
-
 
 # Expose port 80
 EXPOSE 80
