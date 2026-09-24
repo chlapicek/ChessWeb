@@ -1,6 +1,3 @@
-using Amazon.S3;
-using Amazon.S3.Model;
-
 namespace ChessWeb.Services;
 
 public interface IFileStorageService
@@ -131,83 +128,6 @@ public class LocalFileStorageService : IFileStorageService
     }
 }
 
-public sealed class S3FileStorageService : IFileStorageService
-{
-    private readonly IAmazonS3 _client;
-    private readonly string _bucket;
-    private readonly ILogger<S3FileStorageService> _logger;
-
-    public S3FileStorageService(IAmazonS3 client, IConfiguration configuration, ILogger<S3FileStorageService> logger)
-    {
-        _client = client;
-        _bucket = configuration["FileStorage:S3:Bucket"]
-            ?? throw new InvalidOperationException("FileStorage:S3:Bucket must be configured when S3 storage is enabled.");
-        _logger = logger;
-    }
-
-    public async Task<(string storedFileName, string contentType, long sizeBytes)> SaveFileAsync(IFormFile file, string subFolder)
-    {
-        var extension = FileStorageRules.Validate(file);
-        var storedFileName = $"{Guid.NewGuid():N}{extension}";
-        var contentType = FileStorageRules.ResolveContentType(file.ContentType, extension);
-
-        await using var stream = file.OpenReadStream();
-        var request = new PutObjectRequest
-        {
-            BucketName = _bucket,
-            Key = BuildKey(subFolder, storedFileName),
-            InputStream = stream,
-            ContentType = contentType
-        };
-        request.Metadata["original-filename"] = Path.GetFileName(file.FileName);
-        await _client.PutObjectAsync(request);
-
-        return (storedFileName, contentType, file.Length);
-    }
-
-    public async Task<(Stream? stream, string contentType, string originalFileName)> GetFileAsync(string storedFileName, string subFolder)
-    {
-        try
-        {
-            var response = await _client.GetObjectAsync(new GetObjectRequest
-            {
-                BucketName = _bucket,
-                Key = BuildKey(subFolder, storedFileName)
-            });
-
-            var originalFileName = response.Metadata["x-amz-meta-original-filename"]
-                ?? response.Metadata["original-filename"]
-                ?? storedFileName;
-            return (response.ResponseStream, response.Headers.ContentType ?? string.Empty, originalFileName);
-        }
-        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound || ex.ErrorCode == "NoSuchKey")
-        {
-            return (null, string.Empty, string.Empty);
-        }
-    }
-
-    public async Task<bool> DeleteFileAsync(string storedFileName, string subFolder)
-    {
-        try
-        {
-            await _client.DeleteObjectAsync(new DeleteObjectRequest
-            {
-                BucketName = _bucket,
-                Key = BuildKey(subFolder, storedFileName)
-            });
-            return true;
-        }
-        catch (AmazonS3Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting object {StoredFileName}", storedFileName);
-            return false;
-        }
-    }
-
-    private static string BuildKey(string subFolder, string storedFileName) =>
-        $"{FileStorageRules.ValidateSubFolder(subFolder)}/{FileStorageRules.ValidateStoredFileName(storedFileName)}";
-}
-
 internal static class FileStorageRules
 {
     public const long MaxFileSizeBytes = 5 * 1024 * 1024;
@@ -262,14 +182,4 @@ internal static class FileStorageRules
         return subFolder;
     }
 
-    public static string ValidateStoredFileName(string storedFileName)
-    {
-        if (string.IsNullOrWhiteSpace(storedFileName) ||
-            !string.Equals(Path.GetFileName(storedFileName), storedFileName, StringComparison.Ordinal))
-        {
-            throw new ArgumentException("Stored filename must be a single filename segment.", nameof(storedFileName));
-        }
-
-        return storedFileName;
-    }
 }

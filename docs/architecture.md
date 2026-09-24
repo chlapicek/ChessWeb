@@ -43,11 +43,8 @@ ChessWeb/
 - **Enforcement**: Validated on both client side and backend (`FluentValidation` + the configured file-storage service).
 
 ### Attachment Storage
-- `FileStorage:Provider` selects `Local` or `S3`; local disk remains the default for direct development.
-- S3-compatible storage uses `FileStorage:S3:Endpoint`, `AccessKey`, `SecretKey`, `Bucket`, `Region`, and `UsePathStyle`. Keep buckets private and provide credentials through environment variables or a secret manager.
-- Docker Compose selects `Local` storage and mounts the Docker-managed `backend-uploads` named volume at `/var/lib/chessweb/uploads`. The API streams downloads, so attachment files are never exposed as a public static directory. `docker compose down -v` deletes the volume and its contents; back it up separately for production data.
-- Storage keys are generated GUIDs with the validated extension; the original filename is retained as metadata and in the attachment record. No malware scanner is included.
-- When changing from S3 to local storage, existing S3 objects must be copied into the named volume and verified before switching the provider; the application does not migrate them automatically.
+ Attachments use local storage through `FileStorage:Provider=Local`. The application fails fast for unsupported provider values.
+ Existing objects from a previous S3 deployment must be copied into the named volume and verified before deploying this local-only configuration; the application does not migrate them automatically.
 
 ### 3. Interactive Chessboard & PGN Viewer
 - Articles and forum posts can embed PGN or FEN games.

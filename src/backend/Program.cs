@@ -1,6 +1,4 @@
 using System.Text;
-using Amazon.S3;
-using Amazon.Runtime;
 using ChessWeb.Data;
 using ChessWeb.Domain.Entities;
 using ChessWeb.Domain.Enums;
@@ -117,36 +115,12 @@ builder.Services.AddAuthorization(options =>
 // 4. Register Services
 builder.Services.AddScoped<IJwtService, JwtService>();
 var fileStorageProvider = builder.Configuration["FileStorage:Provider"]?.Trim();
-var s3Enabled = builder.Configuration.GetValue<bool?>("FileStorage:S3:Enabled")
-    ?? string.Equals(fileStorageProvider, "S3", StringComparison.OrdinalIgnoreCase);
-if (string.Equals(fileStorageProvider, "S3", StringComparison.OrdinalIgnoreCase) && s3Enabled)
+if (!string.IsNullOrWhiteSpace(fileStorageProvider) &&
+    !string.Equals(fileStorageProvider, "Local", StringComparison.OrdinalIgnoreCase))
 {
-    var endpoint = builder.Configuration["FileStorage:S3:Endpoint"];
-    var accessKey = builder.Configuration["FileStorage:S3:AccessKey"];
-    var secretKey = builder.Configuration["FileStorage:S3:SecretKey"];
-    var bucket = builder.Configuration["FileStorage:S3:Bucket"];
-    if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(accessKey) ||
-        string.IsNullOrWhiteSpace(secretKey) || string.IsNullOrWhiteSpace(bucket))
-    {
-        throw new InvalidOperationException("S3 storage requires FileStorage:S3 endpoint, access key, secret key, and bucket configuration.");
-    }
-
-    builder.Services.AddSingleton<IAmazonS3>(_ =>
-    {
-        var s3Config = new AmazonS3Config
-        {
-            ServiceURL = endpoint,
-            ForcePathStyle = builder.Configuration.GetValue("FileStorage:S3:UsePathStyle", true),
-            AuthenticationRegion = builder.Configuration["FileStorage:S3:Region"] ?? "us-east-1"
-        };
-        return new AmazonS3Client(new BasicAWSCredentials(accessKey, secretKey), s3Config);
-    });
-    builder.Services.AddScoped<IFileStorageService, S3FileStorageService>();
+    throw new InvalidOperationException($"Unsupported file storage provider '{fileStorageProvider}'. Only Local storage is available.");
 }
-else
-{
-    builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
-}
+builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddHttpClient<ICalendarSyncService, CalendarSyncService>();
 builder.Services.AddScoped<ICalendarSyncService, CalendarSyncService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
