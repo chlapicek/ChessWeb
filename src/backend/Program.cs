@@ -1,77 +1,222 @@
-using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Http.HttpResults;
+using System.Text;
+using Amazon.S3;
+using Amazon.Runtime;
+using ChessWeb.Data;
+using ChessWeb.Domain.Entities;
+using ChessWeb.Domain.Enums;
+using ChessWeb.Middleware;
+using ChessWeb.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 
-namespace ChessWeb.Backend
+var builder = WebApplication.CreateBuilder(args);
+
+// Serilog: minimum level is runtime-adjustable via a shared LoggingLevelSwitch (SuperAdmin-controlled, see LoggingController).
+var levelSwitch = new LoggingLevelSwitch(ParseLogEventLevel(builder.Configuration["Logging:LogLevel:Default"]));
+builder.Services.AddSingleton(levelSwitch);
+
+var logsDir = Path.Combine(AppContext.BaseDirectory, "App_Data", "Logs");
+if (!Directory.Exists(logsDir))
 {
-    public class Program
+    Directory.CreateDirectory(logsDir);
+}
+var retainedFileCountLimit = builder.Configuration.GetValue<int?>("Logging:RetainedFileCountLimit") ?? 14;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.ControlledBy(levelSwitch)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        Path.Combine(logsDir, "log-.txt"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: retainedFileCountLimit)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// 1. Database Configuration
+var sqlServerConn = builder.Configuration.GetConnectionString("DefaultConnection");
+var configuredUseSqlite = builder.Configuration.GetValue<bool?>("UseSqlite");
+var useSqlite = configuredUseSqlite
+    ?? string.IsNullOrWhiteSpace(sqlServerConn);
+if (!useSqlite && string.IsNullOrWhiteSpace(sqlServerConn))
+{
+    throw new InvalidOperationException("UseSqlite is disabled but no SQL Server connection string was configured.");
+}
+
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    if (useSqlite || string.IsNullOrWhiteSpace(sqlServerConn))
     {
-        public static void Main(string[] args)
+        var appDataDir = Path.Combine(AppContext.BaseDirectory, "App_Data");
+        if (!Directory.Exists(appDataDir))
         {
-            var builder = WebApplication.CreateSlimBuilder(args);
-
-            builder.WebHost.UseKestrelHttpsConfiguration();
-
-            // Allow frontend to call backend during development.
-            // For production, replace AllowAnyOrigin with specific .WithOrigins("https://your-frontend")
-            builder.Services.AddCors(options =>
-            {
-                options.AddPolicy("AllowFrontend", policy =>
-                {
-                    policy.AllowAnyOrigin()
-                          .AllowAnyMethod()
-                          .AllowAnyHeader();
-                });
-            });
-
-            builder.Services.ConfigureHttpJsonOptions(options =>
-            {
-                options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
-            });
-
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-            builder.Services.AddOpenApi();
-
-            var app = builder.Build();
-
-            // Use CORS before mapping endpoints
-            app.UseCors("AllowFrontend");
-
-            if (app.Environment.IsDevelopment())
-            {
-                app.MapOpenApi();
-            }
-
-            // Simple root handler so GET / doesn't 404
-            app.MapGet("/", () => Results.Text("ChessWeb Backend. Use /todos to get sample data.", "text/plain"));
-
-            Todo[] sampleTodos =
-            [
-                new(1, "Walk the dog"),
-                new(2, "Do the dishes", DateOnly.FromDateTime(DateTime.Now)),
-                new(3, "Do the laundry", DateOnly.FromDateTime(DateTime.Now.AddDays(1))),
-                new(4, "Clean the bathroom"),
-                new(5, "Clean the car", DateOnly.FromDateTime(DateTime.Now.AddDays(2)))
-            ];
-
-            var todosApi = app.MapGroup("/todos");
-            todosApi.MapGet("/", () => sampleTodos)
-                    .WithName("GetTodos");
-
-            todosApi.MapGet("/{id}", Results<Ok<Todo>, NotFound> (int id) =>
-                sampleTodos.FirstOrDefault(a => a.Id == id) is { } todo
-                    ? TypedResults.Ok(todo)
-                    : TypedResults.NotFound())
-                .WithName("GetTodoById");
-
-            app.Run();
+            Directory.CreateDirectory(appDataDir);
         }
+        var dbPath = Path.Combine(appDataDir, "chessweb.db");
+        options.UseSqlite($"Data Source={dbPath}");
+    }
+    else
+    {
+        options.UseSqlServer(sqlServerConn);
+    }
+});
+
+// 2. Identity Configuration
+builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
+{
+    options.Password.RequireDigit = false;
+    options.Password.RequiredLength = 6;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireLowercase = false;
+    options.User.RequireUniqueEmail = true;
+})
+.AddEntityFrameworkStores<ApplicationDbContext>()
+.AddDefaultTokenProviders();
+
+// 3. JWT Authentication & Authorization
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "super_secret_chess_web_key_1234567890!#*?_very_secure_jwt_token_key";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "ChessWebAPI";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "ChessWebClient";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+    };
+});
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAdmin", policy => policy.RequireRole(Roles.Admin));
+    options.AddPolicy("RequireRegistered", policy => policy.RequireAuthenticatedUser());
+});
+
+// 4. Register Services
+builder.Services.AddScoped<IJwtService, JwtService>();
+var fileStorageProvider = builder.Configuration["FileStorage:Provider"]?.Trim();
+var s3Enabled = builder.Configuration.GetValue<bool?>("FileStorage:S3:Enabled")
+    ?? string.Equals(fileStorageProvider, "S3", StringComparison.OrdinalIgnoreCase);
+if (string.Equals(fileStorageProvider, "S3", StringComparison.OrdinalIgnoreCase) && s3Enabled)
+{
+    var endpoint = builder.Configuration["FileStorage:S3:Endpoint"];
+    var accessKey = builder.Configuration["FileStorage:S3:AccessKey"];
+    var secretKey = builder.Configuration["FileStorage:S3:SecretKey"];
+    var bucket = builder.Configuration["FileStorage:S3:Bucket"];
+    if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(accessKey) ||
+        string.IsNullOrWhiteSpace(secretKey) || string.IsNullOrWhiteSpace(bucket))
+    {
+        throw new InvalidOperationException("S3 storage requires FileStorage:S3 endpoint, access key, secret key, and bucket configuration.");
     }
 
-    public record Todo(int Id, string? Title, DateOnly? DueBy = null, bool IsComplete = false);
-
-    [JsonSerializable(typeof(Todo[]))]
-    internal partial class AppJsonSerializerContext : JsonSerializerContext
+    builder.Services.AddSingleton<IAmazonS3>(_ =>
     {
+        var s3Config = new AmazonS3Config
+        {
+            ServiceURL = endpoint,
+            ForcePathStyle = builder.Configuration.GetValue("FileStorage:S3:UsePathStyle", true),
+            AuthenticationRegion = builder.Configuration["FileStorage:S3:Region"] ?? "us-east-1"
+        };
+        return new AmazonS3Client(new BasicAWSCredentials(accessKey, secretKey), s3Config);
+    });
+    builder.Services.AddScoped<IFileStorageService, S3FileStorageService>();
+}
+else
+{
+    builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+}
+builder.Services.AddHttpClient<ICalendarSyncService, CalendarSyncService>();
+builder.Services.AddScoped<ICalendarSyncService, CalendarSyncService>();
+builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.AddSingleton(TimeProvider.System);
 
+// 5. CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", "http://127.0.0.1:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddOpenApi();
+
+var app = builder.Build();
+
+// Global Exception & Request Logging Middleware
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+// Seed Database
+using (var scope = app.Services.CreateScope())
+{
+    await DbInitializer.SeedAsync(scope.ServiceProvider);
+
+    // Apply the persisted logging level so it survives an application restart.
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var persistedSettings = await dbContext.LoggingSettings.AsNoTracking().FirstOrDefaultAsync();
+    if (persistedSettings != null && Enum.TryParse<LogEventLevel>(persistedSettings.MinimumLevel, ignoreCase: true, out var persistedLevel))
+    {
+        levelSwitch.MinimumLevel = persistedLevel;
     }
 }
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseCors("AllowFrontend");
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllers();
+
+try
+{
+    app.Run();
+}
+finally
+{
+    Log.CloseAndFlush();
+}
+
+static LogEventLevel ParseLogEventLevel(string? configuredLevel) =>
+    configuredLevel?.Trim().ToLowerInvariant() switch
+    {
+        "verbose" => LogEventLevel.Verbose,
+        "trace" => LogEventLevel.Verbose,
+        "debug" => LogEventLevel.Debug,
+        "warning" => LogEventLevel.Warning,
+        "error" => LogEventLevel.Error,
+        "critical" => LogEventLevel.Fatal,
+        "fatal" => LogEventLevel.Fatal,
+        "none" => LogEventLevel.Fatal,
+        _ => LogEventLevel.Information
+    };
+
+public partial class Program { }
