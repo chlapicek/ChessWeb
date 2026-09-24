@@ -272,6 +272,10 @@ export const en = {
     subscribe: 'Subscribe',
     unsubscribe: 'Unsubscribe',
     subscribed: 'Subscribed',
+    subscribeEvent: 'Subscribe to event',
+    subscribeSeries: 'Subscribe to series',
+    unsubscribeEvent: 'Unsubscribe from event',
+    unsubscribeSeries: 'Unsubscribe from series',
     subscribeError: 'Failed to update your subscription.',
   },
   players: {

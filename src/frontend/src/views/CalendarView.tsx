@@ -18,7 +18,9 @@ import {
   List,
   CalendarDays,
   Info,
-  Download
+  Download,
+  Bell,
+  BellOff
 } from 'lucide-react';
 
 const WEEKDAYS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -40,13 +42,15 @@ const downloadBlob = (blob: Blob, fileName: string) => {
 
 export const CalendarView: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAuthenticated } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [subscribedEventIds, setSubscribedEventIds] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [downloadingIcs, setDownloadingIcs] = useState(false);
+  const [updatingSubscription, setUpdatingSubscription] = useState(false);
 
   // View state: 'month' (real calendar grid) or 'list' (agenda cards)
   const [viewMode, setViewMode] = useState<'month' | 'list'>('month');
@@ -124,9 +128,66 @@ export const CalendarView: React.FC = () => {
     }
   };
 
+  const fetchSubscriptions = async () => {
+    if (!isAuthenticated) {
+      setSubscribedEventIds(new Set());
+      return;
+    }
+
+    try {
+      const res = await apiClient.get<CalendarEvent[]>('/calendar/my-subscriptions');
+      setSubscribedEventIds(new Set(res.data.map((event) => event.id)));
+    } catch (err) {
+      console.error('Failed to load calendar subscriptions', err);
+    }
+  };
+
   useEffect(() => {
     fetchEvents();
   }, [selectedCategory]);
+
+  useEffect(() => {
+    fetchSubscriptions();
+  }, [isAuthenticated]);
+
+  const handleSubscription = async (evt: CalendarEvent, series: boolean, subscribe: boolean) => {
+    const path = series && evt.recurrenceGroupId
+      ? `/calendar/events/series/${evt.recurrenceGroupId}/subscribe`
+      : `/calendar/events/${evt.id}/subscribe`;
+
+    setUpdatingSubscription(true);
+    try {
+      if (subscribe) {
+        await apiClient.post(path);
+      } else {
+        await apiClient.delete(path);
+      }
+
+      const affectedEventIds = series && evt.recurrenceGroupId
+        ? events.filter((event) => event.recurrenceGroupId === evt.recurrenceGroupId).map((event) => event.id)
+        : [evt.id];
+
+      setSubscribedEventIds((current) => {
+        const next = new Set(current);
+        affectedEventIds.forEach((eventId) => {
+          if (subscribe) next.add(eventId);
+          else next.delete(eventId);
+        });
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to update calendar subscription', err);
+      setStatusMsg(t('calendar.subscribeError'));
+    } finally {
+      setUpdatingSubscription(false);
+    }
+  };
+
+  const isSeriesSubscribed = (evt: CalendarEvent) => {
+    if (!evt.recurrenceGroupId) return false;
+    const seriesEvents = events.filter((event) => event.recurrenceGroupId === evt.recurrenceGroupId);
+    return seriesEvents.length > 0 && seriesEvents.every((event) => subscribedEventIds.has(event.id));
+  };
 
   const handleSyncFeeds = async () => {
     setSyncing(true);
@@ -745,6 +806,44 @@ export const CalendarView: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {isAuthenticated && (
+              <div className="mb-6">
+                <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                  {t('calendar.subscribe')}
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSubscription(selectedEvent, false, !subscribedEventIds.has(selectedEvent.id))}
+                    disabled={updatingSubscription}
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 px-3 py-2 rounded-lg text-xs font-semibold transition"
+                  >
+                    {subscribedEventIds.has(selectedEvent.id) ? <BellOff className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}
+                    <span>
+                      {subscribedEventIds.has(selectedEvent.id)
+                        ? t('calendar.unsubscribeEvent')
+                        : t('calendar.subscribeEvent')}
+                    </span>
+                  </button>
+                  {selectedEvent.recurrenceGroupId && (
+                    <button
+                      type="button"
+                      onClick={() => handleSubscription(selectedEvent, true, !isSeriesSubscribed(selectedEvent))}
+                      disabled={updatingSubscription}
+                      className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-300 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 dark:border-slate-700 transition"
+                    >
+                      {isSeriesSubscribed(selectedEvent) ? <BellOff className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}
+                      <span>
+                        {isSeriesSubscribed(selectedEvent)
+                          ? t('calendar.unsubscribeSeries')
+                          : t('calendar.subscribeSeries')}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
               {selectedEvent.externalUrl ? (

@@ -206,4 +206,45 @@ public class PlayerControllerTests : IClassFixture<WebApplicationFactory<Program
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+
+    [Fact]
+    public async Task SubscribeAndUnsubscribe_ToCalendarSeries_IsIdempotentForAllOccurrences()
+    {
+        var adminClient = _factory.CreateClient();
+        var adminLogin = await adminClient.PostAsJsonAsync("/api/auth/login", new LoginRequest("admin@chessweb.local", "Admin123!#"));
+        var adminAuth = await adminLogin.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(adminAuth);
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth!.Token);
+
+        var createEventResponse = await adminClient.PostAsJsonAsync("/api/calendar/events", new CreateCalendarEventRequest(
+            $"Subscription Test Series {Guid.NewGuid()}", "Description", "Location",
+            DateTime.UtcNow.AddDays(5), DateTime.UtcNow.AddDays(5).AddHours(2), false,
+            CalendarEventCategory.Tournament, RecurrenceType.Weekly, 3));
+        var createdEvents = await createEventResponse.Content.ReadFromJsonAsync<List<CalendarEvent>>();
+        Assert.NotNull(createdEvents);
+        Assert.Equal(3, createdEvents!.Count);
+        var seriesId = createdEvents[0].RecurrenceGroupId;
+        Assert.NotNull(seriesId);
+
+        var client = _factory.CreateClient();
+        await RegisterAndAuthenticateAsync(client);
+
+        var subscribeResponse1 = await client.PostAsync($"/api/calendar/events/series/{seriesId}/subscribe", null);
+        Assert.Equal(HttpStatusCode.OK, subscribeResponse1.StatusCode);
+        var subscribeResponse2 = await client.PostAsync($"/api/calendar/events/series/{seriesId}/subscribe", null);
+        Assert.Equal(HttpStatusCode.OK, subscribeResponse2.StatusCode);
+
+        var mySubscriptions = await client.GetFromJsonAsync<List<CalendarEvent>>("/api/calendar/my-subscriptions");
+        Assert.NotNull(mySubscriptions);
+        Assert.Equal(createdEvents.Count, createdEvents.Count(eventItem => mySubscriptions!.Any(subscription => subscription.Id == eventItem.Id)));
+
+        var unsubscribeResponse1 = await client.DeleteAsync($"/api/calendar/events/series/{seriesId}/subscribe");
+        Assert.Equal(HttpStatusCode.NoContent, unsubscribeResponse1.StatusCode);
+        var unsubscribeResponse2 = await client.DeleteAsync($"/api/calendar/events/series/{seriesId}/subscribe");
+        Assert.Equal(HttpStatusCode.NoContent, unsubscribeResponse2.StatusCode);
+
+        var mySubscriptionsAfter = await client.GetFromJsonAsync<List<CalendarEvent>>("/api/calendar/my-subscriptions");
+        Assert.NotNull(mySubscriptionsAfter);
+        Assert.DoesNotContain(mySubscriptionsAfter!, eventItem => createdEvents.Any(createdEvent => createdEvent.Id == eventItem.Id));
+    }
 }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
 using ChessWeb.Data;
@@ -336,6 +337,48 @@ public class CalendarController : ControllerBase
         return Ok(new { message = "Subscribed." });
     }
 
+    [HttpPost("events/series/{seriesId:guid}/subscribe")]
+    [Authorize]
+    public async Task<IActionResult> SubscribeToSeries(Guid seriesId)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+        var eventIds = await _context.CalendarEvents
+            .Where(e => e.RecurrenceGroupId == seriesId)
+            .Select(e => e.Id)
+            .ToListAsync();
+
+        if (eventIds.Count == 0)
+        {
+            return NotFound(new { message = "Event series not found." });
+        }
+
+        var subscribedEventIds = await _context.EventSubscriptions
+            .Where(s => s.UserId == userId.Value && eventIds.Contains(s.CalendarEventId))
+            .Select(s => s.CalendarEventId)
+            .ToListAsync();
+
+        var newSubscriptions = eventIds
+            .Except(subscribedEventIds)
+            .Select(eventId => new EventSubscription
+            {
+                UserId = userId.Value,
+                CalendarEventId = eventId
+            });
+
+        _context.EventSubscriptions.AddRange(newSubscriptions);
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return Ok(new { message = "Subscribed to series." });
+    }
+
     [HttpDelete("events/{id:guid}/subscribe")]
     [Authorize]
     public async Task<IActionResult> UnsubscribeFromEvent(Guid id)
@@ -354,6 +397,39 @@ public class CalendarController : ControllerBase
             _context.EventSubscriptions.Remove(subscription);
             await _context.SaveChangesAsync();
         }
+
+        return NoContent();
+    }
+
+    [HttpDelete("events/series/{seriesId:guid}/subscribe")]
+    [Authorize]
+    public async Task<IActionResult> UnsubscribeFromSeries(Guid seriesId)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+        var eventIds = await _context.CalendarEvents
+            .Where(e => e.RecurrenceGroupId == seriesId)
+            .Select(e => e.Id)
+            .ToListAsync();
+
+        if (eventIds.Count == 0)
+        {
+            return NotFound(new { message = "Event series not found." });
+        }
+
+        var subscriptions = await _context.EventSubscriptions
+            .Where(s => s.UserId == userId.Value && eventIds.Contains(s.CalendarEventId))
+            .ToListAsync();
+
+        _context.EventSubscriptions.RemoveRange(subscriptions);
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return NoContent();
     }

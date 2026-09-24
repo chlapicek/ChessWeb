@@ -272,6 +272,10 @@ export const cs = {
     subscribe: 'Odebírat',
     unsubscribe: 'Zrušit odběr',
     subscribed: 'Odebíráno',
+    subscribeEvent: 'Odebírat událost',
+    subscribeSeries: 'Odebírat sérii',
+    unsubscribeEvent: 'Zrušit odběr události',
+    unsubscribeSeries: 'Zrušit odběr série',
     subscribeError: 'Nepodařilo se aktualizovat odběr.',
   },
   players: {

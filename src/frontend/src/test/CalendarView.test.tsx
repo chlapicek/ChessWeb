@@ -59,8 +59,21 @@ vi.mock('../services/apiClient', () => ({
 
 const setupApiMocks = () => {
   apiMocks.get.mockImplementation(async (url: string) => {
+    if (url === '/auth/me') {
+      return {
+        data: {
+          id: 'player-1',
+          email: 'player@example.com',
+          fullName: 'Test Player',
+          roles: ['RegisteredUser'],
+        },
+      };
+    }
     if (url === '/calendar/events') {
       return { data: mockEvents };
+    }
+    if (url === '/calendar/my-subscriptions') {
+      return { data: [] };
     }
     if (url.startsWith('/calendar/events/') && url.endsWith('/ics')) {
       return { data: new Blob(['BEGIN:VCALENDAR'], { type: 'text/calendar' }) };
@@ -141,6 +154,27 @@ describe('CalendarView', () => {
 
     await waitFor(() =>
       expect(apiMocks.get).toHaveBeenCalledWith('/calendar/events/event-1/ics', { responseType: 'blob' })
+    );
+  });
+
+  it('subscribes an authenticated user to an event', async () => {
+    localStorage.setItem('chessweb_token', 'test-token');
+    localStorage.setItem('chessweb_user', JSON.stringify({
+      id: 'player-1',
+      email: 'player@example.com',
+      fullName: 'Test Player',
+      roles: ['RegisteredUser'],
+    }));
+
+    renderCalendarView();
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('calendar.listView') }));
+    fireEvent.click(await screen.findByText('Club Championship'));
+
+    const subscribeButton = await screen.findByRole('button', { name: i18n.t('calendar.subscribeEvent') });
+    fireEvent.click(subscribeButton);
+
+    await waitFor(() =>
+      expect(apiMocks.post).toHaveBeenCalledWith('/calendar/events/event-1/subscribe')
     );
   });
 });
