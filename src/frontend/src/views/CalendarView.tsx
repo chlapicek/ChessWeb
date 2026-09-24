@@ -58,12 +58,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
   const [updatingSubscription, setUpdatingSubscription] = useState(false);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(subscribedOnly);
   const [subscriptionError, setSubscriptionError] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false);
+
+  const showSubscribedOnly = subscribedOnly && !showAllEvents;
 
   const events = useMemo(
-    () => subscribedOnly
+    () => showSubscribedOnly
       ? allEvents.filter((event) => subscribedEventIds.has(event.id))
       : allEvents,
-    [allEvents, subscribedEventIds, subscribedOnly]
+    [allEvents, subscribedEventIds, showSubscribedOnly]
   );
   const canManageEvents = isAdmin && !subscribedOnly;
 
@@ -387,15 +390,30 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <CalendarDays className="w-6 h-6 text-amber-500" />
-            <span>{t(subscribedOnly ? 'calendar.myCalendarTitle' : 'calendar.title')}</span>
+            <span>{t(showSubscribedOnly ? 'calendar.myCalendarTitle' : 'calendar.title')}</span>
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            {t(subscribedOnly ? 'calendar.myCalendarSubtitle' : 'calendar.subtitle')}
+            {t(showSubscribedOnly
+              ? 'calendar.myCalendarSubtitle'
+              : subscribedOnly
+              ? 'calendar.allEventsSubtitle'
+              : 'calendar.subtitle')}
           </p>
         </div>
 
         {/* Global actions: Sync, Add Event, View Mode toggle */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {subscribedOnly && (
+            <button
+              type="button"
+              onClick={() => setShowAllEvents((current) => !current)}
+              aria-pressed={showAllEvents}
+              className="rounded-xl border border-slate-300 bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              {showAllEvents ? t('calendar.showSubscribedEvents') : t('calendar.showAllEvents')}
+            </button>
+          )}
+
           {/* View mode toggle */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-700">
             <button
@@ -502,10 +520,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
       </div>
 
       {/* VIEW MODE 1: REAL INTERACTIVE MONTH CALENDAR */}
-      {(!subscribedOnly || (!subscriptionsLoading && !subscriptionError)) && viewMode === 'month' && (
+      {(!showSubscribedOnly || (!subscriptionsLoading && !subscriptionError)) && viewMode === 'month' && (
         events.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-            {subscribedOnly ? t('calendar.noSubscribedEvents') : t('calendar.noEvents')}
+            {showSubscribedOnly ? t('calendar.noSubscribedEvents') : t('calendar.noEvents')}
           </div>
         ) : (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-md dark:shadow-xl transition-colors">
@@ -643,13 +661,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
       )}
 
       {/* VIEW MODE 2: AGENDA / LIST VIEW */}
-      {(!subscribedOnly || (!subscriptionsLoading && !subscriptionError)) && viewMode === 'list' && (
+      {(!showSubscribedOnly || (!subscriptionsLoading && !subscriptionError)) && viewMode === 'list' && (
         <div>
           {loading ? (
             <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>
           ) : events.length === 0 ? (
             <div className="text-center py-12 bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-500 dark:text-slate-400 text-sm">
-              {subscribedOnly ? t('calendar.noSubscribedEvents') : t('calendar.noEvents')}
+              {showSubscribedOnly ? t('calendar.noSubscribedEvents') : t('calendar.noEvents')}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -279,9 +279,12 @@ export const en = {
     subscribeError: 'Failed to update your subscription.',
     myCalendarTitle: 'My Calendar',
     myCalendarSubtitle: 'Your subscribed events and series.',
+    allEventsSubtitle: 'All club events and series.',
     noSubscribedEvents: 'You have no subscribed events yet.',
     subscriptionLoadError: 'Failed to load your subscribed events.',
     eventLoadError: 'Failed to load calendar events.',
+    showAllEvents: 'Show all events',
+    showSubscribedEvents: 'Show subscribed events',
   },
   players: {
     title: 'Players',

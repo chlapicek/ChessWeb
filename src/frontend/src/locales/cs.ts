@@ -279,9 +279,12 @@ export const cs = {
     subscribeError: 'Nepodařilo se aktualizovat odběr.',
     myCalendarTitle: 'Můj kalendář',
     myCalendarSubtitle: 'Vaše odebírané události a série.',
+    allEventsSubtitle: 'Všechny klubové události a série.',
     noSubscribedEvents: 'Zatím neodebíráte žádné události.',
     subscriptionLoadError: 'Nepodařilo se načíst odebírané události.',
     eventLoadError: 'Nepodařilo se načíst události kalendáře.',
+    showAllEvents: 'Zobrazit všechny události',
+    showSubscribedEvents: 'Zobrazit pouze odebírané události',
   },
   players: {
     title: 'Hráči',

@@ -200,5 +200,12 @@ describe('CalendarView', () => {
 
     expect(await screen.findByText('Club Championship')).toBeInTheDocument();
     expect(screen.queryByText('Casual Club Night')).not.toBeInTheDocument();
+
+    const showAllButton = screen.getByRole('button', { name: i18n.t('calendar.showAllEvents') });
+    expect(showAllButton).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(showAllButton);
+
+    expect(await screen.findByText('Casual Club Night')).toBeInTheDocument();
+    expect(showAllButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
