@@ -61,6 +61,44 @@ END:VCALENDAR")),
     }
 
     [Fact]
+    public async Task SyncFeedAsync_WithHtmlDescription_StoresReadablePlainText()
+    {
+        var feed = new CalendarFeed
+        {
+            Id = Guid.NewGuid(),
+            Name = "HTML Feed",
+            Url = "https://example.com/html.ics",
+            Type = FeedType.IcsCalendar,
+            IsActive = true
+        };
+        _context.CalendarFeeds.Add(feed);
+        await _context.SaveChangesAsync();
+
+        var service = new CalendarSyncService(
+            _context,
+            new HttpClient(new StubHttpMessageHandler(@"BEGIN:VCALENDAR
+PRODID:-//ChessWeb//Test//EN
+VERSION:2.0
+BEGIN:VEVENT
+UID:html-event-1
+SUMMARY:HTML Event
+DTSTART:20261002T180000Z
+DTEND:20261002T210000Z
+DESCRIPTION:<p>Weekly <strong>club</strong> event<br class=""line-break"">Bring a board &amp; clock. Score 1 &lt; 3 &gt; 0.</p>
+LOCATION:Main Hall
+END:VEVENT
+END:VCALENDAR")),
+            NullLogger<CalendarSyncService>.Instance);
+
+        await service.SyncFeedAsync(feed.Id);
+
+        var savedEvent = await _context.CalendarEvents.SingleAsync();
+        Assert.Equal("Weekly club event\nBring a board & clock. Score 1 < 3 > 0.", savedEvent.Description);
+        Assert.DoesNotContain("<strong", savedEvent.Description);
+        Assert.DoesNotContain("<br", savedEvent.Description);
+    }
+
+    [Fact]
     public async Task SyncAllFeedsAsync_WithMultipleFeeds_ProcessesAllActiveFeeds()
     {
         _context.CalendarFeeds.AddRange(

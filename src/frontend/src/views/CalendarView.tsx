@@ -40,6 +40,14 @@ const downloadBlob = (blob: Blob, fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
+const cleanCalendarText = (value: string) => {
+  const withLineBreaks = value
+    .replace(/<\s*br\b[^>]*>/gi, '\n')
+    .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, '\n');
+  const document = new DOMParser().parseFromString(withLineBreaks, 'text/html');
+  return (document.body.textContent || '').replace(/[ \t]+\n/g, '\n').trim();
+};
+
 interface CalendarViewProps {
   subscribedOnly?: boolean;
 }
@@ -707,7 +715,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
 
                       {evt.description && (
                         <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 mb-4 leading-relaxed">
-                          {evt.description}
+                          {cleanCalendarText(evt.description)}
                         </p>
                       )}
                     </div>
@@ -827,7 +835,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
                   {t('calendar.description')}
                 </h4>
                 <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                  {selectedEvent.description}
+                  {cleanCalendarText(selectedEvent.description)}
                 </p>
               </div>
             )}

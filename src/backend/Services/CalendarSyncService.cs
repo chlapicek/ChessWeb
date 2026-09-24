@@ -1,4 +1,6 @@
+using System.Net;
 using System.ServiceModel.Syndication;
+using System.Text.RegularExpressions;
 using System.Xml;
 using ChessWeb.Data;
 using ChessWeb.Domain.Entities;
@@ -83,9 +85,9 @@ public class CalendarSyncService : ICalendarSyncService
                     {
                         var newEvent = new CalendarEvent
                         {
-                            Title = evt.Summary ?? "Untitled Chess Event",
-                            Description = evt.Description ?? string.Empty,
-                            Location = evt.Location ?? string.Empty,
+                            Title = CleanFeedText(evt.Summary) ?? "Untitled Chess Event",
+                            Description = CleanFeedText(evt.Description) ?? string.Empty,
+                            Location = CleanFeedText(evt.Location) ?? string.Empty,
                             StartTime = startTime,
                             EndTime = endTime,
                             IsAllDay = evt.IsAllDay,
@@ -99,9 +101,9 @@ public class CalendarSyncService : ICalendarSyncService
                     }
                     else
                     {
-                        existing.Title = evt.Summary ?? existing.Title;
-                        existing.Description = evt.Description ?? existing.Description;
-                        existing.Location = evt.Location ?? existing.Location;
+                        existing.Title = CleanFeedText(evt.Summary) ?? existing.Title;
+                        existing.Description = CleanFeedText(evt.Description) ?? existing.Description;
+                        existing.Location = CleanFeedText(evt.Location) ?? existing.Location;
                         existing.StartTime = startTime;
                         existing.EndTime = endTime;
                         existing.IsAllDay = evt.IsAllDay;
@@ -130,8 +132,8 @@ public class CalendarSyncService : ICalendarSyncService
                         {
                             var newEvent = new CalendarEvent
                             {
-                                Title = item.Title.Text,
-                                Description = item.Summary?.Text ?? string.Empty,
+                                Title = CleanFeedText(item.Title?.Text) ?? "Untitled Chess Event",
+                                Description = CleanFeedText(item.Summary?.Text) ?? string.Empty,
                                 Location = "External Event",
                                 StartTime = startTime,
                                 EndTime = startTime.AddHours(3),
@@ -146,8 +148,8 @@ public class CalendarSyncService : ICalendarSyncService
                         }
                         else
                         {
-                            existing.Title = item.Title.Text;
-                            existing.Description = item.Summary?.Text ?? existing.Description;
+                            existing.Title = CleanFeedText(item.Title?.Text) ?? existing.Title;
+                            existing.Description = CleanFeedText(item.Summary?.Text) ?? existing.Description;
                             existing.StartTime = startTime;
                         }
                         count++;
@@ -190,5 +192,23 @@ public class CalendarSyncService : ICalendarSyncService
             return CalendarEventCategory.ClubNight;
         }
         return CalendarEventCategory.Tournament;
+    }
+
+    private static string? CleanFeedText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var decoded = WebUtility.HtmlDecode(value);
+        decoded = Regex.Replace(decoded, @"<\s*br\b[^>]*>", "\n", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        decoded = Regex.Replace(decoded, @"</\s*(p|div|li|h[1-6])\s*>", "\n", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        decoded = Regex.Replace(
+            decoded,
+            @"<\s*/?\s*(?:a|abbr|b|br|blockquote|code|div|em|h[1-6]|i|li|ol|p|pre|small|span|strong|u|ul)\b[^>]*>",
+            string.Empty,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return Regex.Replace(decoded, @"[ \t]+\n", "\n").Trim();
     }
 }
