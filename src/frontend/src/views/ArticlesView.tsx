@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
@@ -538,7 +538,12 @@ export const ArticlesView: React.FC = () => {
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400 mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
                 <span className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-medium">
                   <User className="w-4 h-4 text-amber-500" />
-                  {selectedArticle.authorName}
+                  <Link
+                    to={`/players/${selectedArticle.authorId}`}
+                    className="rounded-sm hover:text-amber-600 dark:hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                  >
+                    {selectedArticle.authorName}
+                  </Link>
                   {selectedArticle.authorRating && (
                     <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-mono">
                       {selectedArticle.authorRating} Elo
@@ -759,7 +764,13 @@ export const ArticlesView: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-300">
                       <User className="w-3.5 h-3.5 text-amber-500" />
-                      {art.authorName}
+                      <Link
+                        to={`/players/${art.authorId}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="rounded-sm hover:text-amber-600 dark:hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                      >
+                        {art.authorName}
+                      </Link>
                     </span>
                     {art.authorRating && (
                       <span className="bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 text-[10px] px-1.5 py-0.5 rounded font-mono">
