@@ -17,12 +17,14 @@ Full-stack chess web portal built with **ASP.NET Core (.NET 10)** and **React (T
 ## Running the Application
 
 ### 1. Run with Docker Compose
+Set the production database and JWT signing secrets before starting Compose:
 ```bash
+export MSSQL_SA_PASSWORD='replace-with-a-strong-password'
+export JWT_SIGNING_KEY='replace-with-a-long-random-key'
 docker-compose up --build
 ```
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8080/api`
 
+For local development with dummy defaults and hot reload, use `docker-compose.dev.yml` instead.
 Docker Compose stores attachments through `LocalFileStorageService` in the Docker-managed `backend-uploads` named volume, mounted at `/var/lib/chessweb/uploads`. The API streams downloads rather than exposing the volume as a public directory. The volume survives container replacement, but `docker compose down -v` permanently deletes its contents; back it up separately for production data.
 
 ### 2. Run Locally
