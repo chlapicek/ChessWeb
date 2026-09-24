@@ -277,6 +277,11 @@ export const cs = {
     unsubscribeEvent: 'Zrušit odběr události',
     unsubscribeSeries: 'Zrušit odběr série',
     subscribeError: 'Nepodařilo se aktualizovat odběr.',
+    myCalendarTitle: 'Můj kalendář',
+    myCalendarSubtitle: 'Vaše odebírané události a série.',
+    noSubscribedEvents: 'Zatím neodebíráte žádné události.',
+    subscriptionLoadError: 'Nepodařilo se načíst odebírané události.',
+    eventLoadError: 'Nepodařilo se načíst události kalendáře.',
   },
   players: {
     title: 'Hráči',
@@ -295,9 +300,6 @@ export const cs = {
     saveNickname: 'Uložit přezdívku',
     nicknameSaved: 'Přezdívka byla aktualizována.',
     nicknameSaveError: 'Přezdívku se nepodařilo aktualizovat.',
-    myCalendarTitle: 'Můj kalendář',
-    noSubscriptions: 'Zatím neodebíráte žádné události.',
-    loadSubscriptionsError: 'Nepodařilo se načíst odebírané události.',
   },
   teamAvailability: {
     title: 'Dostupnost týmu',

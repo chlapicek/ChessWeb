@@ -86,12 +86,12 @@ const setupApiMocks = () => {
   apiMocks.request.mockResolvedValue({ data: {} });
 };
 
-const renderCalendarView = () =>
+const renderCalendarView = (props: { subscribedOnly?: boolean } = {}) =>
   render(
     <ThemeProvider>
       <AuthProvider>
         <MemoryRouter>
-          <CalendarView />
+          <CalendarView {...props} />
         </MemoryRouter>
       </AuthProvider>
     </ThemeProvider>
@@ -176,5 +176,29 @@ describe('CalendarView', () => {
     await waitFor(() =>
       expect(apiMocks.post).toHaveBeenCalledWith('/calendar/events/event-1/subscribe')
     );
+  });
+
+  it('shows only subscribed events in subscribed-only mode', async () => {
+    localStorage.setItem('chessweb_token', 'test-token');
+    localStorage.setItem('chessweb_user', JSON.stringify({
+      id: 'player-1',
+      email: 'player@example.com',
+      fullName: 'Test Player',
+      roles: ['RegisteredUser'],
+    }));
+    apiMocks.get.mockImplementation(async (url: string) => {
+      if (url === '/auth/me') {
+        return { data: JSON.parse(localStorage.getItem('chessweb_user') || '{}') };
+      }
+      if (url === '/calendar/events') return { data: mockEvents };
+      if (url === '/calendar/my-subscriptions') return { data: [mockEvents[0]] };
+      return { data: [] };
+    });
+
+    renderCalendarView({ subscribedOnly: true });
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('calendar.listView') }));
+
+    expect(await screen.findByText('Club Championship')).toBeInTheDocument();
+    expect(screen.queryByText('Casual Club Night')).not.toBeInTheDocument();
   });
 });

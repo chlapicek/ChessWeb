@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiClient } from '../services/apiClient';
 import { useAuth } from '../context/AuthContext';
-import { CalendarEvent, PlayerProfile } from '../types';
-import { ArrowLeft, Trophy, CalendarDays, Save, User as UserIcon } from 'lucide-react';
+import { PlayerProfile } from '../types';
+import { ArrowLeft, Trophy, Save, User as UserIcon } from 'lucide-react';
+import { CalendarView } from './CalendarView';
 
 export const PlayerProfileView: React.FC = () => {
   const { t } = useTranslation();
@@ -18,8 +19,6 @@ export const PlayerProfileView: React.FC = () => {
   const [nicknameInput, setNicknameInput] = useState('');
   const [savingNickname, setSavingNickname] = useState(false);
 
-  const [subscriptions, setSubscriptions] = useState<CalendarEvent[]>([]);
-  const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -39,24 +38,6 @@ export const PlayerProfileView: React.FC = () => {
 
     if (id) fetchProfile();
   }, [id]);
-
-  useEffect(() => {
-    const fetchSubscriptions = async () => {
-      if (!profile?.isSelf) return;
-      setLoadingSubscriptions(true);
-      try {
-        const res = await apiClient.get<CalendarEvent[]>('/calendar/my-subscriptions');
-        setSubscriptions(res.data);
-      } catch (err) {
-        console.error('Failed to load subscriptions', err);
-        toast.error(t('players.loadSubscriptionsError'));
-      } finally {
-        setLoadingSubscriptions(false);
-      }
-    };
-
-    fetchSubscriptions();
-  }, [profile?.isSelf, t]);
 
   const handleSaveNickname = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +75,7 @@ export const PlayerProfileView: React.FC = () => {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Link
         to="/players"
         className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 mb-6 transition"
@@ -167,33 +148,7 @@ export const PlayerProfileView: React.FC = () => {
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('players.resultsComingSoon')}</p>
       </div>
 
-      {profile.isSelf && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
-            <CalendarDays className="w-4 h-4 text-amber-500" />
-            <span>{t('players.myCalendarTitle')}</span>
-          </h3>
-          {loadingSubscriptions ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
-          ) : subscriptions.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('players.noSubscriptions')}</p>
-          ) : (
-            <ul className="space-y-2">
-              {subscriptions.map((evt) => (
-                <li
-                  key={evt.id}
-                  className="flex items-center justify-between text-sm border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2"
-                >
-                  <span className="text-slate-800 dark:text-slate-200 font-medium">{evt.title}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                    {new Date(evt.startTime).toLocaleDateString()}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {profile.isSelf && <CalendarView subscribedOnly />}
     </div>
   );
 };

@@ -277,6 +277,11 @@ export const en = {
     unsubscribeEvent: 'Unsubscribe from event',
     unsubscribeSeries: 'Unsubscribe from series',
     subscribeError: 'Failed to update your subscription.',
+    myCalendarTitle: 'My Calendar',
+    myCalendarSubtitle: 'Your subscribed events and series.',
+    noSubscribedEvents: 'You have no subscribed events yet.',
+    subscriptionLoadError: 'Failed to load your subscribed events.',
+    eventLoadError: 'Failed to load calendar events.',
   },
   players: {
     title: 'Players',
@@ -295,9 +300,6 @@ export const en = {
     saveNickname: 'Save nickname',
     nicknameSaved: 'Nickname updated.',
     nicknameSaveError: 'Failed to update nickname.',
-    myCalendarTitle: 'My Calendar',
-    noSubscriptions: 'You have no subscribed events yet.',
-    loadSubscriptionsError: 'Failed to load your subscribed events.',
   },
   teamAvailability: {
     title: 'Team Availability',

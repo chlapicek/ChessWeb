@@ -40,17 +40,32 @@ const downloadBlob = (blob: Blob, fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
-export const CalendarView: React.FC = () => {
+interface CalendarViewProps {
+  subscribedOnly?: boolean;
+}
+
+export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = false }) => {
   const { t, i18n } = useTranslation();
   const { isAdmin, isAuthenticated } = useAuth();
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
   const [subscribedEventIds, setSubscribedEventIds] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<number | 'all'>('all');
   const [loading, setLoading] = useState(true);
+  const [eventLoadError, setEventLoadError] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [downloadingIcs, setDownloadingIcs] = useState(false);
   const [updatingSubscription, setUpdatingSubscription] = useState(false);
+  const [subscriptionsLoading, setSubscriptionsLoading] = useState(subscribedOnly);
+  const [subscriptionError, setSubscriptionError] = useState(false);
+
+  const events = useMemo(
+    () => subscribedOnly
+      ? allEvents.filter((event) => subscribedEventIds.has(event.id))
+      : allEvents,
+    [allEvents, subscribedEventIds, subscribedOnly]
+  );
+  const canManageEvents = isAdmin && !subscribedOnly;
 
   // View state: 'month' (real calendar grid) or 'list' (agenda cards)
   const [viewMode, setViewMode] = useState<'month' | 'list'>('month');
@@ -116,13 +131,15 @@ export const CalendarView: React.FC = () => {
 
   const fetchEvents = async () => {
     setLoading(true);
+    setEventLoadError(false);
     try {
       const res = await apiClient.get<CalendarEvent[]>('/calendar/events', {
         params: selectedCategory !== 'all' ? { category: selectedCategory } : {},
       });
-      setEvents(res.data);
+      setAllEvents(res.data);
     } catch (err) {
       console.error('Failed to load events', err);
+      setEventLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -131,14 +148,20 @@ export const CalendarView: React.FC = () => {
   const fetchSubscriptions = async () => {
     if (!isAuthenticated) {
       setSubscribedEventIds(new Set());
+      setSubscriptionsLoading(false);
       return;
     }
 
+    setSubscriptionsLoading(true);
+    setSubscriptionError(false);
     try {
       const res = await apiClient.get<CalendarEvent[]>('/calendar/my-subscriptions');
       setSubscribedEventIds(new Set(res.data.map((event) => event.id)));
     } catch (err) {
       console.error('Failed to load calendar subscriptions', err);
+      setSubscriptionError(true);
+    } finally {
+      setSubscriptionsLoading(false);
     }
   };
 
@@ -164,7 +187,7 @@ export const CalendarView: React.FC = () => {
       }
 
       const affectedEventIds = series && evt.recurrenceGroupId
-        ? events.filter((event) => event.recurrenceGroupId === evt.recurrenceGroupId).map((event) => event.id)
+        ? allEvents.filter((event) => event.recurrenceGroupId === evt.recurrenceGroupId).map((event) => event.id)
         : [evt.id];
 
       setSubscribedEventIds((current) => {
@@ -185,7 +208,7 @@ export const CalendarView: React.FC = () => {
 
   const isSeriesSubscribed = (evt: CalendarEvent) => {
     if (!evt.recurrenceGroupId) return false;
-    const seriesEvents = events.filter((event) => event.recurrenceGroupId === evt.recurrenceGroupId);
+    const seriesEvents = allEvents.filter((event) => event.recurrenceGroupId === evt.recurrenceGroupId);
     return seriesEvents.length > 0 && seriesEvents.every((event) => subscribedEventIds.has(event.id));
   };
 
@@ -364,10 +387,10 @@ export const CalendarView: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <CalendarDays className="w-6 h-6 text-amber-500" />
-            <span>{t('calendar.title')}</span>
+            <span>{t(subscribedOnly ? 'calendar.myCalendarTitle' : 'calendar.title')}</span>
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            {t('calendar.subtitle')}
+            {t(subscribedOnly ? 'calendar.myCalendarSubtitle' : 'calendar.subtitle')}
           </p>
         </div>
 
@@ -399,7 +422,7 @@ export const CalendarView: React.FC = () => {
             </button>
           </div>
 
-          {isAdmin && (
+          {canManageEvents && (
             <>
               <button
                 onClick={handleSyncFeeds}
@@ -432,6 +455,24 @@ export const CalendarView: React.FC = () => {
         </div>
       )}
 
+      {subscribedOnly && subscriptionsLoading && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          {t('common.loading')}
+        </div>
+      )}
+
+      {subscribedOnly && subscriptionError && (
+        <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+          {t('calendar.subscriptionLoadError')}
+        </div>
+      )}
+
+      {eventLoadError && (
+        <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+          {t('calendar.eventLoadError')}
+        </div>
+      )}
+
       {/* Category Filter Pills */}
       <div className="flex flex-wrap gap-2 mb-6">
         <button
@@ -461,7 +502,12 @@ export const CalendarView: React.FC = () => {
       </div>
 
       {/* VIEW MODE 1: REAL INTERACTIVE MONTH CALENDAR */}
-      {viewMode === 'month' && (
+      {(!subscribedOnly || (!subscriptionsLoading && !subscriptionError)) && viewMode === 'month' && (
+        events.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
+            {subscribedOnly ? t('calendar.noSubscribedEvents') : t('calendar.noEvents')}
+          </div>
+        ) : (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-md dark:shadow-xl transition-colors">
           {/* Calendar Toolbar: Month Title + Prev/Next/Today */}
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
@@ -512,7 +558,7 @@ export const CalendarView: React.FC = () => {
                 <div
                   key={idx}
                   onClick={() => {
-                    if (isAdmin && cell.events.length === 0) {
+                    if (canManageEvents && cell.events.length === 0) {
                       openAddEventOnDate(cell.date);
                     }
                   }}
@@ -537,7 +583,7 @@ export const CalendarView: React.FC = () => {
                     </span>
 
                     {/* Quick Add button for admin on hover */}
-                    {isAdmin && (
+                    {canManageEvents && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -593,16 +639,17 @@ export const CalendarView: React.FC = () => {
             })}
           </div>
         </div>
+        )
       )}
 
       {/* VIEW MODE 2: AGENDA / LIST VIEW */}
-      {viewMode === 'list' && (
+      {(!subscribedOnly || (!subscriptionsLoading && !subscriptionError)) && viewMode === 'list' && (
         <div>
           {loading ? (
             <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>
           ) : events.length === 0 ? (
             <div className="text-center py-12 bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-500 dark:text-slate-400 text-sm">
-              {t('calendar.noEvents')}
+              {subscribedOnly ? t('calendar.noSubscribedEvents') : t('calendar.noEvents')}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -676,7 +723,7 @@ export const CalendarView: React.FC = () => {
                           </a>
                         ) : <span />}
 
-                        {isAdmin && (
+                        {canManageEvents && (
                           <button
                             onClick={() => handleDeleteEvent(evt.id)}
                             className="text-slate-400 hover:text-rose-500 transition p-1"
@@ -859,7 +906,7 @@ export const CalendarView: React.FC = () => {
               ) : <div />}
 
               <div className="flex flex-wrap items-center gap-2">
-                {isAdmin && selectedEvent.recurrenceGroupId ? (
+                {canManageEvents && selectedEvent.recurrenceGroupId ? (
                   <>
                     <button
                       onClick={() => handleDeleteEvent(selectedEvent.id, false)}
@@ -874,7 +921,7 @@ export const CalendarView: React.FC = () => {
                       {t('calendar.deleteEntireSeries')}
                     </button>
                   </>
-                ) : isAdmin ? (
+                ) : canManageEvents ? (
                   <button
                     onClick={() => handleDeleteEvent(selectedEvent.id, false)}
                     className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/70 border border-rose-200 dark:border-rose-900 rounded-lg text-xs font-semibold transition"
