@@ -18,10 +18,13 @@ public class PlayerControllerTests : IClassFixture<WebApplicationFactory<Program
     }
 
     private static async Task<(HttpClient client, UserDto user)> RegisterAndAuthenticateAsync(
-        HttpClient client, string? nickname = null)
+        HttpClient client,
+        string? nickname = null,
+        string? fullName = null,
+        string? chessRating = null)
     {
         var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
-            $"test-{Guid.NewGuid():N}@chessweb.local", "Player123!#", $"Test Player {Guid.NewGuid():N}", null, null, nickname));
+            $"test-{Guid.NewGuid():N}@chessweb.local", "Player123!#", fullName ?? $"Test Player {Guid.NewGuid():N}", chessRating, null, nickname));
         Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
         var auth = await registerResponse.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.NotNull(auth);
@@ -103,6 +106,60 @@ public class PlayerControllerTests : IClassFixture<WebApplicationFactory<Program
     }
 
     [Fact]
+    public async Task GetPlayers_ReturnsPrivateFieldsForCurrentUserWithoutTeamMembership()
+    {
+        var client = _factory.CreateClient();
+        var (_, user) = await RegisterAndAuthenticateAsync(client, $"self-{Guid.NewGuid():N}", "Private Self", "1750");
+
+        var players = await client.GetFromJsonAsync<List<PlayerSummaryDto>>("/api/player");
+
+        Assert.NotNull(players);
+        var self = Assert.Single(players!, player => player.Id == user.Id);
+        Assert.Equal("Private Self", self.FullName);
+        Assert.Equal("1750", self.ChessRating);
+    }
+
+    [Fact]
+    public async Task GetPlayers_ReturnsPrivateFieldsForSharedTeamMembersOnly()
+    {
+        var targetClient = _factory.CreateClient();
+        var (_, target) = await RegisterAndAuthenticateAsync(targetClient, $"target-{Guid.NewGuid():N}", "Team Target", "1850");
+        var viewerClient = _factory.CreateClient();
+        var (_, viewer) = await RegisterAndAuthenticateAsync(viewerClient);
+        var unrelatedClient = _factory.CreateClient();
+        await RegisterAndAuthenticateAsync(unrelatedClient);
+        var admin = _factory.CreateClient();
+        var loginResponse = await admin.PostAsJsonAsync("/api/auth/login", new LoginRequest("admin@chessweb.local", "Admin123!#"));
+        var adminAuth = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(adminAuth);
+        admin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth!.Token);
+
+        var createTeamResponse = await admin.PostAsJsonAsync("/api/teams", new CreateTeamRequest($"Player privacy {Guid.NewGuid():N}"));
+        Assert.Equal(HttpStatusCode.Created, createTeamResponse.StatusCode);
+        var team = await createTeamResponse.Content.ReadFromJsonAsync<TeamDto>();
+        Assert.NotNull(team);
+        try
+        {
+            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/teams/{team!.Id}/members", new AssignTeamMemberRequest(target.Id))).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/teams/{team.Id}/members", new AssignTeamMemberRequest(viewer.Id))).StatusCode);
+
+            var viewerPlayers = await viewerClient.GetFromJsonAsync<List<PlayerSummaryDto>>("/api/player");
+            var visibleTarget = Assert.Single(viewerPlayers!, player => player.Id == target.Id);
+            Assert.Equal("Team Target", visibleTarget.FullName);
+            Assert.Equal("1850", visibleTarget.ChessRating);
+
+            var unrelatedPlayers = await unrelatedClient.GetFromJsonAsync<List<PlayerSummaryDto>>("/api/player");
+            var redactedTarget = Assert.Single(unrelatedPlayers!, player => player.Id == target.Id);
+            Assert.Null(redactedTarget.FullName);
+            Assert.Null(redactedTarget.ChessRating);
+        }
+        finally
+        {
+            await admin.DeleteAsync($"/api/teams/{team!.Id}");
+        }
+    }
+
+    [Fact]
     public async Task GetPlayer_ReturnsProfileWithIsSelfTrue_ForOwnId()
     {
         var client = _factory.CreateClient();
@@ -124,6 +181,42 @@ public class PlayerControllerTests : IClassFixture<WebApplicationFactory<Program
         var response = await client.GetAsync($"/api/player/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetPlayer_HidesPrivateFieldsFromUnrelatedUser()
+    {
+        var targetClient = _factory.CreateClient();
+        var (_, target) = await RegisterAndAuthenticateAsync(targetClient, $"target-{Guid.NewGuid():N}", "Private Target", "1900");
+        var viewerClient = _factory.CreateClient();
+        await RegisterAndAuthenticateAsync(viewerClient);
+
+        var profile = await viewerClient.GetFromJsonAsync<PlayerProfileDto>($"/api/player/{target.Id}");
+
+        Assert.NotNull(profile);
+        Assert.Equal(target.Nickname, profile!.Nickname);
+        Assert.Null(profile.FullName);
+        Assert.Null(profile.ChessRating);
+        Assert.Null(profile.FideId);
+        Assert.False(profile.IsSelf);
+    }
+
+    [Fact]
+    public async Task GetPlayer_ReturnsPrivateFieldsToAdministrator()
+    {
+        var targetClient = _factory.CreateClient();
+        var (_, target) = await RegisterAndAuthenticateAsync(targetClient, $"target-{Guid.NewGuid():N}", "Private Target", "1900");
+        var admin = _factory.CreateClient();
+        var loginResponse = await admin.PostAsJsonAsync("/api/auth/login", new LoginRequest("admin@chessweb.local", "Admin123!#"));
+        var auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(auth);
+        admin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth!.Token);
+
+        var profile = await admin.GetFromJsonAsync<PlayerProfileDto>($"/api/player/{target.Id}");
+
+        Assert.NotNull(profile);
+        Assert.Equal("Private Target", profile!.FullName);
+        Assert.Equal("1900", profile.ChessRating);
     }
 
     [Fact]

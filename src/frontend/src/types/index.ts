@@ -172,18 +172,18 @@ export interface Partner {
 
 export interface PlayerSummary {
   id: string;
-  fullName: string;
-  nickname?: string;
-  chessRating?: string;
-  fideId?: string;
+  fullName: string | null;
+  nickname: string | null;
+  chessRating: string | null;
+  fideId: string | null;
 }
 
 export interface PlayerProfile {
   id: string;
-  fullName: string;
-  nickname?: string;
-  chessRating?: string;
-  fideId?: string;
+  fullName: string | null;
+  nickname: string | null;
+  chessRating: string | null;
+  fideId: string | null;
   isSelf: boolean;
 }
 

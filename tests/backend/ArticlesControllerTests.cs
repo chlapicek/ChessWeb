@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using ChessWeb.Domain.Entities;
 using ChessWeb.DTOs;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
@@ -26,11 +27,15 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
         return client;
     }
 
-    private static async Task<(HttpClient client, UserDto user)> RegisterAndLoginAsync(HttpClient anonymousFactoryClient, string? fullName = null)
+    private static async Task<(HttpClient client, UserDto user)> RegisterAndLoginAsync(
+        HttpClient anonymousFactoryClient,
+        string? fullName = null,
+        string? chessRating = null,
+        string? nickname = null)
     {
         fullName ??= $"Test Author {Guid.NewGuid():N}";
         var registerResponse = await anonymousFactoryClient.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
-            $"test-{Guid.NewGuid():N}@chessweb.local", "Player123!#", fullName, null, null, null));
+            $"test-{Guid.NewGuid():N}@chessweb.local", "Player123!#", fullName, chessRating, null, nickname));
         Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
         var auth = await registerResponse.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.NotNull(auth);
@@ -90,6 +95,182 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
         var fetched = await getResponse.Content.ReadFromJsonAsync<ArticleDto>();
         Assert.NotNull(fetched);
         Assert.Equal(created.Id, fetched!.Id);
+    }
+
+    [Fact]
+    public async Task AnonymousUser_SeesNicknameInsteadOfArticleAndCommentRealNamesOrRatings()
+    {
+        var authorNickname = $"KnightWriter-{Guid.NewGuid():N}";
+        var commenterNickname = $"TacticalMind-{Guid.NewGuid():N}";
+        var authorClient = _factory.CreateClient();
+        var (author, _) = await RegisterAndLoginAsync(authorClient, "Private Article Author", "2100", authorNickname);
+        var created = await CreateArticleAsync(author);
+
+        var commenterClient = _factory.CreateClient();
+        var (commenter, _) = await RegisterAndLoginAsync(commenterClient, "Private Comment Author", "1800", commenterNickname);
+        await commenter.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Private comment"));
+
+        var response = await _factory.CreateClient().GetAsync($"/api/articles/{created.Id}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var article = await response.Content.ReadFromJsonAsync<ArticleDto>();
+
+        Assert.NotNull(article);
+        Assert.Equal(authorNickname, article!.AuthorName);
+        Assert.Null(article.AuthorRating);
+        var comment = Assert.Single(article.Comments);
+        Assert.Equal(commenterNickname, comment.AuthorName);
+        Assert.Null(comment.AuthorRating);
+    }
+
+    [Fact]
+    public async Task AuthorWithoutTeamMembership_CanSeeTheirOwnFullNameAndRating()
+    {
+        var client = _factory.CreateClient();
+        var fullName = $"Private Author {Guid.NewGuid():N}";
+        var (author, _) = await RegisterAndLoginAsync(client, fullName, "2050", $"author-{Guid.NewGuid():N}");
+        var created = await CreateArticleAsync(author);
+
+        var response = await author.GetAsync($"/api/articles/{created.Id}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var article = await response.Content.ReadFromJsonAsync<ArticleDto>();
+
+        Assert.NotNull(article);
+        Assert.Equal(fullName, article!.AuthorName);
+        Assert.Equal("2050", article.AuthorRating);
+    }
+
+    [Fact]
+    public async Task TeamMember_SeesPrivateArticleAuthorIdentityForSharedTeam()
+    {
+        var authorClient = _factory.CreateClient();
+        var fullName = $"Team Article Author {Guid.NewGuid():N}";
+        var (author, authorUser) = await RegisterAndLoginAsync(authorClient, fullName, "1950", $"author-{Guid.NewGuid():N}");
+        var created = await CreateArticleAsync(author);
+        var viewerClient = _factory.CreateClient();
+        var (viewer, viewerUser) = await RegisterAndLoginAsync(viewerClient);
+        var admin = await CreateAuthenticatedClientAsync("admin@chessweb.local", "Admin123!#");
+
+        var createTeamResponse = await admin.PostAsJsonAsync("/api/teams", new CreateTeamRequest($"Article privacy {Guid.NewGuid():N}"));
+        Assert.Equal(HttpStatusCode.Created, createTeamResponse.StatusCode);
+        var team = await createTeamResponse.Content.ReadFromJsonAsync<TeamDto>();
+        Assert.NotNull(team);
+        try
+        {
+            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/teams/{team!.Id}/members", new AssignTeamMemberRequest(authorUser.Id))).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/teams/{team.Id}/members", new AssignTeamMemberRequest(viewerUser.Id))).StatusCode);
+
+            var response = await viewer.GetAsync($"/api/articles/{created.Id}");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var article = await response.Content.ReadFromJsonAsync<ArticleDto>();
+
+            Assert.NotNull(article);
+            Assert.Equal(fullName, article!.AuthorName);
+            Assert.Equal("1950", article.AuthorRating);
+        }
+        finally
+        {
+            await admin.DeleteAsync($"/api/teams/{team!.Id}");
+        }
+    }
+
+    [Fact]
+    public async Task UnpublishedArticleAndAttachment_AreVisibleOnlyToAuthorAndAdministrators()
+    {
+        var authorClient = _factory.CreateClient();
+        var (author, _) = await RegisterAndLoginAsync(authorClient);
+        Guid? articleId = null;
+        var additionalDraftIds = new List<Guid>();
+        try
+        {
+            using var form = BuildCreateArticleForm("Private draft", "Draft content.");
+            form.Add(new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes("private attachment")), "attachments", "private.txt");
+            var createResponse = await author.PostAsync("/api/articles", form);
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+            var created = await createResponse.Content.ReadFromJsonAsync<ArticleDto>();
+            Assert.NotNull(created);
+            articleId = created!.Id;
+            var attachmentId = Assert.Single(created.Attachments).Id;
+            var unrelated = await RegisterAndLoginAsync(_factory.CreateClient());
+            var preexistingCommentResponse = await unrelated.client.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Comment before unpublishing"));
+            Assert.Equal(HttpStatusCode.OK, preexistingCommentResponse.StatusCode);
+            var preexistingComment = await preexistingCommentResponse.Content.ReadFromJsonAsync<ArticleCommentDto>();
+            Assert.NotNull(preexistingComment);
+
+            var unpublishResponse = await author.PutAsJsonAsync($"/api/articles/{created.Id}",
+                new UpdateArticleRequest(created.Title, created.Content, created.Summary, created.PgnData, created.FenData, false));
+            Assert.Equal(HttpStatusCode.OK, unpublishResponse.StatusCode);
+
+            var anonymous = _factory.CreateClient();
+            Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/articles/{created.Id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/articles/attachments/{attachmentId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Anonymous draft comment"))).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync($"/api/articles/{created.Id}/reactions", new ToggleReactionRequest(ArticleReactionType.Like))).StatusCode);
+
+            Assert.Equal(HttpStatusCode.NotFound, (await unrelated.client.GetAsync($"/api/articles/{created.Id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await unrelated.client.GetAsync($"/api/articles/attachments/{attachmentId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await unrelated.client.PutAsJsonAsync($"/api/articles/{created.Id}",
+                new UpdateArticleRequest("Hijacked draft", "Changed content", null, null, null, false))).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await unrelated.client.DeleteAsync($"/api/articles/{created.Id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await unrelated.client.DeleteAsync($"/api/articles/comments/{preexistingComment!.Id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await unrelated.client.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Hidden draft comment"))).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await unrelated.client.PostAsJsonAsync($"/api/articles/{created.Id}/reactions", new ToggleReactionRequest(ArticleReactionType.Like))).StatusCode);
+
+            var ownerArticle = await author.GetAsync($"/api/articles/{created.Id}");
+            Assert.Equal(HttpStatusCode.OK, ownerArticle.StatusCode);
+            var ownerAttachment = await author.GetAsync($"/api/articles/attachments/{attachmentId}");
+            Assert.Equal(HttpStatusCode.OK, ownerAttachment.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await author.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Owner draft comment"))).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await author.PostAsJsonAsync($"/api/articles/{created.Id}/reactions", new ToggleReactionRequest(ArticleReactionType.Like))).StatusCode);
+
+            foreach (var credentials in new[]
+            {
+                (Email: "admin@chessweb.local", Password: "Admin123!#"),
+                (Email: "superadmin@chessweb.local", Password: "SuperAdmin123!#")
+            })
+            {
+                var administrator = await CreateAuthenticatedClientAsync(credentials.Email, credentials.Password);
+                Assert.Equal(HttpStatusCode.OK, (await administrator.GetAsync($"/api/articles/{created.Id}")).StatusCode);
+                Assert.Equal(HttpStatusCode.OK, (await administrator.GetAsync($"/api/articles/attachments/{attachmentId}")).StatusCode);
+                Assert.Equal(HttpStatusCode.OK, (await administrator.PutAsJsonAsync($"/api/articles/{created.Id}",
+                    new UpdateArticleRequest(created.Title, created.Content, created.Summary, created.PgnData, created.FenData, false))).StatusCode);
+                Assert.Equal(HttpStatusCode.OK, (await administrator.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Administrator draft comment"))).StatusCode);
+                Assert.Equal(HttpStatusCode.OK, (await administrator.PostAsJsonAsync($"/api/articles/{created.Id}/reactions", new ToggleReactionRequest(ArticleReactionType.Chess))).StatusCode);
+
+                var deletableDraft = await CreateArticleAsync(author, $"Draft delete {Guid.NewGuid():N}", "Private draft.");
+                additionalDraftIds.Add(deletableDraft.Id);
+                await author.PutAsJsonAsync($"/api/articles/{deletableDraft.Id}", new UpdateArticleRequest(deletableDraft.Title, deletableDraft.Content, null, null, null, false));
+                Assert.Equal(HttpStatusCode.NoContent, (await administrator.DeleteAsync($"/api/articles/{deletableDraft.Id}")).StatusCode);
+            }
+        }
+        finally
+        {
+            foreach (var additionalDraftId in additionalDraftIds)
+            {
+                await author.DeleteAsync($"/api/articles/{additionalDraftId}");
+            }
+            if (articleId is Guid createdArticleId)
+            {
+                await author.DeleteAsync($"/api/articles/{createdArticleId}");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Administrator_SeesNicknamesInArticlesWhileRatingsRemainVisible()
+    {
+        var authorClient = _factory.CreateClient();
+        var (author, _) = await RegisterAndLoginAsync(authorClient, "Private Article Author", "2100", $"KnightWriter-{Guid.NewGuid():N}");
+        var created = await CreateArticleAsync(author);
+
+        var admin = await CreateAuthenticatedClientAsync("admin@chessweb.local", "Admin123!#");
+        var response = await admin.GetAsync($"/api/articles/{created.Id}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var article = await response.Content.ReadFromJsonAsync<ArticleDto>();
+
+        Assert.NotNull(article);
+        Assert.Equal("KnightWriter", article!.AuthorName[..12]);
+        Assert.Equal("2100", article.AuthorRating);
+        Assert.DoesNotContain("Private Article Author", article.AuthorName);
     }
 
     [Fact]
@@ -260,5 +441,18 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
         var likeAfterRemove = Assert.Single(afterRemove!, r => r.ReactionType == ChessWeb.Domain.Entities.ArticleReactionType.Like);
         Assert.Equal(0, likeAfterRemove.Count);
         Assert.False(likeAfterRemove.UserReacted);
+    }
+
+    [Fact]
+    public async Task ToggleReaction_RejectsUndefinedReactionType()
+    {
+        var client = _factory.CreateClient();
+        var (author, _) = await RegisterAndLoginAsync(client);
+        var created = await CreateArticleAsync(author);
+
+        var response = await author.PostAsJsonAsync($"/api/articles/{created.Id}/reactions",
+            new ToggleReactionRequest((ChessWeb.Domain.Entities.ArticleReactionType)999));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }

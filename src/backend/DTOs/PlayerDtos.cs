@@ -12,7 +12,7 @@ public record UpdateNicknameRequest(string? Nickname);
 
 public record PlayerSummaryDto(
     Guid Id,
-    string FullName,
+    string? FullName,
     string? Nickname,
     string? ChessRating,
     string? FideId
@@ -20,7 +20,7 @@ public record PlayerSummaryDto(
 
 public record PlayerProfileDto(
     Guid Id,
-    string FullName,
+    string? FullName,
     string? Nickname,
     string? ChessRating,
     string? FideId,

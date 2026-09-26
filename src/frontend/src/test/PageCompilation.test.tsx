@@ -7,6 +7,7 @@ import { AuthProvider } from '../context/AuthContext';
 import { ArticlesView } from '../views/ArticlesView';
 import { CalendarView } from '../views/CalendarView';
 import { BoardView } from '../views/BoardView';
+import { PlayersView } from '../views/PlayersView';
 import { SettingsView } from '../views/SettingsView';
 import { AdminView } from '../views/AdminView';
 import '../i18n';
@@ -51,6 +52,10 @@ vi.mock('../services/apiClient', () => ({
         return { data: [] };
       }
 
+      if (url === '/player') {
+        return { data: [{ id: 'redacted-player', fullName: null, nickname: null, chessRating: null, fideId: null }] };
+      }
+
       return { data: [] };
     }),
     post: vi.fn(async () => ({ data: {} })),
@@ -73,6 +78,7 @@ describe('Page compilation smoke test', () => {
     ['Articles', <ArticlesView />],
     ['Calendar', <CalendarView />],
     ['Board', <BoardView />],
+    ['Players', <PlayersView />],
     ['Settings', <SettingsView />],
     ['Admin', <AdminView />],
   ])('renders %s page without crashing', (_name, element) => {
@@ -129,5 +135,14 @@ describe('Page compilation smoke test', () => {
 
     fireEvent.click(importButton);
     await waitFor(() => expect(screen.getByRole('button', { name: '1. d4' })).not.toHaveAttribute('aria-current', 'step'));
+  });
+
+  it('filters player summaries when full names are privacy-redacted', async () => {
+    await i18n.changeLanguage('en');
+    renderWithProviders(<PlayersView />);
+
+    expect(await screen.findByText(i18n.t('common.member'))).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(i18n.t('players.searchPlaceholder')), { target: { value: 'unmatched' } });
+    expect(await screen.findByText(i18n.t('players.noPlayers'))).toBeInTheDocument();
   });
 });

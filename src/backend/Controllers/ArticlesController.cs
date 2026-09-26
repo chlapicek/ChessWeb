@@ -67,7 +67,10 @@ public class ArticlesController : ControllerBase
             .Take(pageSize)
             .ToListAsync();
 
-        var items = rawArticles.Select(a => MapToArticleDto(a, currentUserId, includeComments: false)).ToList();
+        var privilegedUserIds = await GetPrivilegedUserIdsAsync(
+            currentUserId,
+            rawArticles.Select(article => article.AuthorId));
+        var items = rawArticles.Select(a => MapToArticleDto(a, currentUserId, privilegedUserIds, User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin), includeComments: false)).ToList();
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
         return Ok(new PagedResult<ArticleDto>(items, totalCount, page, pageSize, totalPages));
@@ -98,7 +101,15 @@ public class ArticlesController : ControllerBase
             return NotFound(new { message = "Article not found." });
         }
 
-        var dto = MapToArticleDto(article, currentUserId, includeComments: true);
+        if (!article.IsPublished && !HasUnpublishedArticleAccess(article, currentUserId))
+        {
+            return NotFound(new { message = "Article not found." });
+        }
+
+        var privilegedUserIds = await GetPrivilegedUserIdsAsync(
+            currentUserId,
+            new[] { article.AuthorId }.Concat(article.Comments.Select(comment => comment.AuthorId)));
+        var dto = MapToArticleDto(article, currentUserId, privilegedUserIds, User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin), includeComments: true);
         return Ok(dto);
     }
 
@@ -139,6 +150,7 @@ public class ArticlesController : ControllerBase
             PgnData = request.PgnData,
             FenData = request.FenData,
             AuthorId = userId,
+            Author = user,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -157,9 +169,10 @@ public class ArticlesController : ControllerBase
                         FileSizeBytes = sizeBytes
                     });
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    return BadRequest(new { message = $"Error with file '{file.FileName}': {ex.Message}" });
+                    _logger.LogError(exception, "Failed to save article attachment {FileName} for user {UserId}", file.FileName, userId);
+                    return BadRequest(new { message = $"Could not upload file '{file.FileName}'." });
                 }
             }
         }
@@ -167,7 +180,10 @@ public class ArticlesController : ControllerBase
         _context.Articles.Add(article);
         await _context.SaveChangesAsync();
 
-        var dto = MapToArticleDto(article, userId, includeComments: true);
+        var privilegedUserIds = await GetPrivilegedUserIdsAsync(
+            userId,
+            new[] { article.AuthorId }.Concat(article.Comments.Select(comment => comment.AuthorId)));
+        var dto = MapToArticleDto(article, userId, privilegedUserIds, User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin), includeComments: true);
         return CreatedAtAction(nameof(GetArticleById), new { id = article.Id }, dto);
     }
 
@@ -189,8 +205,16 @@ public class ArticlesController : ControllerBase
         }
 
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var isAdmin = User.IsInRole(Roles.Admin);
-        if (!Guid.TryParse(userIdStr, out var userId) || (article.AuthorId != userId && !isAdmin))
+        var isAdministrator = User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin);
+        if (!Guid.TryParse(userIdStr, out var userId))
+        {
+            return Forbid();
+        }
+        if (!article.IsPublished && !HasUnpublishedArticleAccess(article, userId))
+        {
+            return NotFound(new { message = "Article not found." });
+        }
+        if (article.AuthorId != userId && !isAdministrator)
         {
             return Forbid();
         }
@@ -233,7 +257,10 @@ public class ArticlesController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        var dto = MapToArticleDto(article, userId, includeComments: true);
+        var privilegedUserIds = await GetPrivilegedUserIdsAsync(
+            userId,
+            new[] { article.AuthorId }.Concat(article.Comments.Select(comment => comment.AuthorId)));
+        var dto = MapToArticleDto(article, userId, privilegedUserIds, User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin), includeComments: true);
         return Ok(dto);
     }
 
@@ -251,9 +278,16 @@ public class ArticlesController : ControllerBase
         }
 
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var isAdmin = User.IsInRole(Roles.Admin);
-
-        if (!Guid.TryParse(userIdStr, out var userId) || (article.AuthorId != userId && !isAdmin))
+        var isAdministrator = User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin);
+        if (!Guid.TryParse(userIdStr, out var userId))
+        {
+            return Forbid();
+        }
+        if (!article.IsPublished && !HasUnpublishedArticleAccess(article, userId))
+        {
+            return NotFound(new { message = "Article not found." });
+        }
+        if (article.AuthorId != userId && !isAdministrator)
         {
             return Forbid();
         }
@@ -293,6 +327,11 @@ public class ArticlesController : ControllerBase
             return Unauthorized();
         }
 
+        if (!article.IsPublished && !HasUnpublishedArticleAccess(article, userId))
+        {
+            return NotFound(new { message = "Article not found." });
+        }
+
         var user = await _context.Users.FindAsync(userId);
         if (user == null)
         {
@@ -303,6 +342,7 @@ public class ArticlesController : ControllerBase
         {
             ArticleId = id,
             AuthorId = userId,
+            Author = user,
             Content = request.Content,
             CreatedAt = DateTime.UtcNow
         };
@@ -310,16 +350,8 @@ public class ArticlesController : ControllerBase
         _context.ArticleComments.Add(comment);
         await _context.SaveChangesAsync();
 
-        var commentDto = new ArticleCommentDto(
-            comment.Id,
-            comment.ArticleId,
-            comment.Content,
-            comment.CreatedAt,
-            comment.UpdatedAt,
-            comment.AuthorId,
-            user.FullName.Length > 0 ? user.FullName : user.UserName ?? "Member",
-            user.ChessRating
-        );
+        var privilegedUserIds = await GetPrivilegedUserIdsAsync(userId, new[] { userId });
+        var commentDto = MapToArticleCommentDto(comment, privilegedUserIds, User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin));
 
         return Ok(commentDto);
     }
@@ -328,16 +360,26 @@ public class ArticlesController : ControllerBase
     [Authorize] // Author of comment or Admin can delete
     public async Task<IActionResult> DeleteComment(Guid commentId)
     {
-        var comment = await _context.ArticleComments.FindAsync(commentId);
+        var comment = await _context.ArticleComments
+            .Include(row => row.Article)
+            .FirstOrDefaultAsync(row => row.Id == commentId);
         if (comment == null)
         {
             return NotFound(new { message = "Comment not found." });
         }
 
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var isAdmin = User.IsInRole(Roles.Admin);
+        var isAdministrator = User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin);
 
-        if (!Guid.TryParse(userIdStr, out var userId) || (comment.AuthorId != userId && !isAdmin))
+        if (!Guid.TryParse(userIdStr, out var userId))
+        {
+            return Forbid();
+        }
+        if (!comment.Article.IsPublished && !HasUnpublishedArticleAccess(comment.Article, userId))
+        {
+            return NotFound(new { message = "Comment not found." });
+        }
+        if (comment.AuthorId != userId && !isAdministrator)
         {
             return Forbid();
         }
@@ -352,6 +394,11 @@ public class ArticlesController : ControllerBase
     [Authorize] // Registered users can react
     public async Task<ActionResult<IEnumerable<ReactionSummaryDto>>> ToggleReaction(Guid id, [FromBody] ToggleReactionRequest request)
     {
+        if (!Enum.IsDefined(request.ReactionType))
+        {
+            return BadRequest(new { message = "Reaction type is invalid." });
+        }
+
         var article = await _context.Articles.FindAsync(id);
         if (article == null)
         {
@@ -362,6 +409,10 @@ public class ArticlesController : ControllerBase
         if (!Guid.TryParse(userIdStr, out var userId))
         {
             return Unauthorized();
+        }
+        if (!article.IsPublished && !HasUnpublishedArticleAccess(article, userId))
+        {
+            return NotFound(new { message = "Article not found." });
         }
 
         var existingReaction = await _context.ArticleReactions
@@ -396,8 +447,17 @@ public class ArticlesController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> DownloadAttachment(Guid attachmentId)
     {
-        var attachment = await _context.Attachments.FindAsync(attachmentId);
-        if (attachment == null)
+        var attachment = await _context.Attachments
+            .Include(row => row.Article)
+            .FirstOrDefaultAsync(row => row.Id == attachmentId);
+        if (attachment?.Article == null)
+        {
+            return NotFound();
+        }
+
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var currentUserId = Guid.TryParse(userIdStr, out var parsedId) ? parsedId : (Guid?)null;
+        if (!attachment.Article.IsPublished && !HasUnpublishedArticleAccess(attachment.Article, currentUserId))
         {
             return NotFound();
         }
@@ -411,19 +471,18 @@ public class ArticlesController : ControllerBase
         return File(stream, contentType, attachment.FileName);
     }
 
-    private static ArticleDto MapToArticleDto(Article article, Guid? currentUserId, bool includeComments)
+    private bool HasUnpublishedArticleAccess(Article article, Guid? currentUserId) =>
+        currentUserId == article.AuthorId || User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin);
+
+    private static ArticleDto MapToArticleDto(
+        Article article,
+        Guid? currentUserId,
+        ISet<Guid> privilegedUserIds,
+        bool isAdministratorViewer,
+        bool includeComments)
     {
         var comments = includeComments
-            ? article.Comments.OrderBy(c => c.CreatedAt).Select(c => new ArticleCommentDto(
-                c.Id,
-                c.ArticleId,
-                c.Content,
-                c.CreatedAt,
-                c.UpdatedAt,
-                c.AuthorId,
-                c.Author != null && c.Author.FullName.Length > 0 ? c.Author.FullName : c.Author?.UserName ?? "Member",
-                c.Author?.ChessRating
-            )).ToList()
+            ? article.Comments.OrderBy(c => c.CreatedAt).Select(c => MapToArticleCommentDto(c, privilegedUserIds, isAdministratorViewer)).ToList()
             : new List<ArticleCommentDto>();
 
         var reactions = BuildReactionSummary(article.Reactions, currentUserId);
@@ -439,13 +498,73 @@ public class ArticlesController : ControllerBase
             article.CreatedAt,
             article.UpdatedAt,
             article.AuthorId,
-            article.Author != null && article.Author.FullName.Length > 0 ? article.Author.FullName : article.Author?.UserName ?? "Anonymous",
-            article.Author?.ChessRating,
+            GetDisplayName(article.Author, privilegedUserIds.Contains(article.AuthorId), isAdministratorViewer, "Anonymous"),
+            privilegedUserIds.Contains(article.AuthorId) ? article.Author?.ChessRating : null,
             article.Attachments.Select(att => new AttachmentDto(att.Id, att.FileName, att.ContentType, att.FileSizeBytes, att.UploadedAt)).ToList(),
             comments,
             reactions,
             article.Comments.Count
         );
+    }
+
+    private async Task<HashSet<Guid>> GetPrivilegedUserIdsAsync(Guid? currentUserId, IEnumerable<Guid> subjectUserIds)
+    {
+        var subjects = subjectUserIds.Distinct().ToList();
+        if (subjects.Count == 0)
+        {
+            return [];
+        }
+
+        if (User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin))
+        {
+            return subjects.ToHashSet();
+        }
+
+        if (!currentUserId.HasValue)
+        {
+            return [];
+        }
+
+        var sharedTeamUserIds = await _context.TeamMemberships
+            .Where(membership => membership.UserId == currentUserId.Value)
+            .SelectMany(membership => membership.Team.Memberships)
+            .Where(membership => subjects.Contains(membership.UserId))
+            .Select(membership => membership.UserId)
+            .Distinct()
+            .ToListAsync();
+
+        var privilegedUserIds = sharedTeamUserIds.ToHashSet();
+        privilegedUserIds.Add(currentUserId.Value);
+        return privilegedUserIds;
+    }
+
+    private static ArticleCommentDto MapToArticleCommentDto(ArticleComment comment, ISet<Guid> privilegedUserIds, bool isAdministratorViewer)
+    {
+        var hasSharedIdentityAccess = privilegedUserIds.Contains(comment.AuthorId);
+        return new ArticleCommentDto(
+            comment.Id,
+            comment.ArticleId,
+            comment.Content,
+            comment.CreatedAt,
+            comment.UpdatedAt,
+                comment.AuthorId,
+                GetDisplayName(comment.Author, hasSharedIdentityAccess, isAdministratorViewer),
+                hasSharedIdentityAccess ? comment.Author?.ChessRating : null);
+    }
+
+            private static string GetDisplayName(ApplicationUser? user, bool hasSharedIdentityAccess, bool isAdministratorViewer, string fallback = "Member")
+    {
+        if (user == null)
+        {
+            return fallback;
+        }
+
+        if (!isAdministratorViewer && hasSharedIdentityAccess && !string.IsNullOrWhiteSpace(user.FullName))
+        {
+            return user.FullName;
+        }
+
+        return !string.IsNullOrWhiteSpace(user.Nickname) ? user.Nickname : fallback;
     }
 
     private static List<ReactionSummaryDto> BuildReactionSummary(IEnumerable<ArticleReaction> reactions, Guid? currentUserId)

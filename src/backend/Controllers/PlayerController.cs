@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ChessWeb.Data;
 using ChessWeb.Domain.Entities;
 using ChessWeb.Domain.Enums;
 using ChessWeb.DTOs;
@@ -18,24 +19,35 @@ public class PlayerController : ControllerBase
     private const int MaxNicknameLength = 100;
 
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _context;
     private readonly ILogger<PlayerController> _logger;
 
-    public PlayerController(UserManager<ApplicationUser> userManager, ILogger<PlayerController> logger)
+    public PlayerController(UserManager<ApplicationUser> userManager, ApplicationDbContext context, ILogger<PlayerController> logger)
     {
         _userManager = userManager;
+        _context = context;
         _logger = logger;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<PlayerSummaryDto>>> GetPlayers()
     {
+        var currentUserId = GetCurrentUserId();
+        var isAdministrator = User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin);
+        var currentTeamIds = currentUserId.HasValue
+            ? await _context.TeamMemberships.Where(membership => membership.UserId == currentUserId.Value).Select(membership => membership.TeamId).ToListAsync()
+            : [];
+        var sharedTeamUserIds = currentTeamIds.Count > 0
+            ? await _context.TeamMemberships.Where(membership => currentTeamIds.Contains(membership.TeamId)).Select(membership => membership.UserId).ToListAsync()
+            : [];
         var players = await _userManager.Users
             .AsNoTracking()
             .OrderBy(u => u.FullName)
-            .Select(u => new PlayerSummaryDto(u.Id, u.FullName, u.Nickname, u.ChessRating, u.FideId))
             .ToListAsync();
 
-        return Ok(players);
+        return Ok(players.Select(player => MapPlayerSummary(
+            player,
+            isAdministrator || player.Id == currentUserId || sharedTeamUserIds.Contains(player.Id))));
     }
 
     [HttpGet("{id:guid}")]
@@ -49,8 +61,31 @@ public class PlayerController : ControllerBase
 
         var currentUserIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var isSelf = Guid.TryParse(currentUserIdStr, out var currentUserId) && currentUserId == id;
+        var canViewPrivateProfile = isSelf || User.IsInRole(Roles.Admin) || User.IsInRole(Roles.SuperAdmin) || await _context.TeamMemberships
+            .AnyAsync(membership => membership.UserId == currentUserId && _context.TeamMemberships.Any(targetMembership => targetMembership.UserId == id && targetMembership.TeamId == membership.TeamId));
 
-        return Ok(new PlayerProfileDto(user.Id, user.FullName, user.Nickname, user.ChessRating, user.FideId, isSelf));
+        return Ok(new PlayerProfileDto(
+            user.Id,
+            canViewPrivateProfile ? user.FullName : null,
+            user.Nickname,
+            canViewPrivateProfile ? user.ChessRating : null,
+            canViewPrivateProfile ? user.FideId : null,
+            isSelf));
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
+    }
+
+    private static PlayerSummaryDto MapPlayerSummary(ApplicationUser player, bool canViewPrivateProfile)
+    {
+        return new PlayerSummaryDto(
+            player.Id,
+            canViewPrivateProfile ? player.FullName : null,
+            player.Nickname,
+            canViewPrivateProfile ? player.ChessRating : null,
+            canViewPrivateProfile ? player.FideId : null);
     }
 
     [HttpPut("{id:guid}")]

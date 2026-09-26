@@ -66,7 +66,7 @@ export const PlayerProfileView: React.FC = () => {
       <div className="max-w-3xl mx-auto px-4 py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
         {t('players.notFound')}
         <div className="mt-4">
-          <Link to="/players" className="text-amber-600 dark:text-amber-400 hover:underline font-semibold text-xs">
+          <Link to="/players" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold text-xs">
             {t('players.backToPlayers')}
           </Link>
         </div>
@@ -78,7 +78,7 @@ export const PlayerProfileView: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Link
         to="/players"
-        className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 mb-6 transition"
+        className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 mb-6 transition"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         <span>{t('players.backToPlayers')}</span>
@@ -86,14 +86,14 @@ export const PlayerProfileView: React.FC = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mb-6">
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-14 h-14 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 dark:text-amber-400 shrink-0">
+          <div className="w-14 h-14 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500 dark:text-emerald-400 shrink-0">
             <UserIcon className="w-7 h-7" />
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-              {profile.nickname || profile.fullName}
+              {profile.nickname || profile.fullName || t('common.member')}
             </h2>
-            {profile.nickname && (
+            {profile.nickname && profile.fullName && (
               <p className="text-sm text-slate-500 dark:text-slate-400">{profile.fullName}</p>
             )}
           </div>
@@ -116,21 +116,22 @@ export const PlayerProfileView: React.FC = () => {
 
         {profile.isSelf && (
           <form onSubmit={handleSaveNickname} className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label htmlFor="player-nickname" className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               {t('players.myNickname')}
             </label>
             <div className="flex gap-2">
               <input
+                id="player-nickname"
                 type="text"
                 value={nicknameInput}
                 onChange={(e) => setNicknameInput(e.target.value)}
                 placeholder={t('players.nicknamePlaceholder')}
-                className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
               <button
                 type="submit"
                 disabled={savingNickname}
-                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs shadow transition"
+                className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs shadow transition"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>{savingNickname ? t('common.saving') : t('players.saveNickname')}</span>
@@ -142,7 +143,7 @@ export const PlayerProfileView: React.FC = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mb-6">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
-          <Trophy className="w-4 h-4 text-amber-500" />
+          <Trophy className="w-4 h-4 text-emerald-500" />
           <span>{t('players.resultsTitle')}</span>
         </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('players.resultsComingSoon')}</p>
