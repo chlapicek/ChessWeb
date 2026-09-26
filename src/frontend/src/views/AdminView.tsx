@@ -304,7 +304,7 @@ export const AdminView: React.FC = () => {
       {/* User Management & Role Assignment */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-md dark:shadow-xl transition-colors">
         <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-          <UserCheck className="w-4 h-4 text-amber-500" />
+          <UserCheck className="w-4 h-4 text-emerald-500" />
           <span>{t('admin.memberRoles')}</span>
         </h3>
 
@@ -369,7 +369,7 @@ export const AdminView: React.FC = () => {
                         title={t('admin.editPlayer')}
                         aria-label={t('admin.editPlayerLabel', { name: u.fullName })}
                         onClick={() => startEditingUser(u)}
-                        className="p-1.5 rounded-lg text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                        className="p-1.5 rounded-lg text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -393,6 +393,7 @@ export const AdminView: React.FC = () => {
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200'
                         }`}
                       >
+                        {t('common.roleNames.ClubMember')}
                       </button>
                       {isSuperAdmin && (
                         <button
@@ -403,7 +404,7 @@ export const AdminView: React.FC = () => {
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200'
                           }`}
                         >
-                          SuperAdmin
+                          {t('common.roleNames.SuperAdmin')}
                         </button>
                       )}
                     </div>
@@ -455,7 +456,7 @@ export const AdminView: React.FC = () => {
                         {editUserError && <p className="text-xs text-rose-600 dark:text-rose-400" role="alert">{editUserError}</p>}
                         <button
                           type="submit"
-                          className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs"
+                          className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs"
                         >
                           {t('admin.savePlayerChanges')}
                         </button>
@@ -540,7 +541,7 @@ export const AdminView: React.FC = () => {
       {/* External Calendar Feeds Management */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-md dark:shadow-xl transition-colors">
         <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-          <RefreshCw className="w-4 h-4 text-amber-500" />
+          <RefreshCw className="w-4 h-4 text-emerald-500" />
           <span>{t('admin.externalFeeds')}</span>
         </h3>
 
@@ -554,7 +555,7 @@ export const AdminView: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-slate-900 dark:text-white">{feed.name}</span>
-                  <span className="bg-slate-200 dark:bg-slate-800 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                  <span className="bg-slate-200 dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-mono">
                     {feed.type === 0 ? t('admin.iCal') : t('admin.rss')}
                   </span>
                 </div>
@@ -611,7 +612,7 @@ export const AdminView: React.FC = () => {
 
           <button
             type="submit"
-            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1"
+            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{t('admin.addFeedBtn')}</span>
@@ -621,7 +622,7 @@ export const AdminView: React.FC = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-md dark:shadow-xl transition-colors">
         <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-          <Handshake className="w-4 h-4 text-amber-500" />
+          <Handshake className="w-4 h-4 text-emerald-500" />
           <span>{t('admin.partners')}</span>
         </h3>
 
@@ -679,7 +680,7 @@ export const AdminView: React.FC = () => {
                   title={t('admin.editPartner')}
                   aria-label={t('admin.editPartnerLabel', { name: partner.name })}
                   onClick={() => startEditingPartner(partner)}
-                  className="p-1.5 rounded-lg text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                  className="p-1.5 rounded-lg text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -728,14 +729,14 @@ export const AdminView: React.FC = () => {
               accept="image/*"
               aria-invalid={!!partnerLogoError}
               onChange={(e) => { setPartnerLogoFile(e.target.files?.[0] ?? null); setPartnerLogoError(''); }}
-              className="bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white file:mr-3 file:rounded file:border-0 file:bg-amber-500 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-950"
+              className="bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white file:mr-3 file:rounded file:border-0 file:bg-emerald-500 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-slate-950"
             />
           </div>
           {partnerLogoError && <p className="text-xs text-rose-600 dark:text-rose-400" role="alert">{partnerLogoError}</p>}
 
           <button
             type="submit"
-            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1"
+            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{editingPartnerId ? t('admin.savePartnerChanges') : t('admin.addPartnerBtn')}</span>

@@ -103,7 +103,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={() => fillQuickAccount('admin@chessweb.local', 'Admin123!#')}
-                className="bg-slate-200 dark:bg-slate-800 hover:bg-amber-500/20 hover:text-amber-700 dark:hover:text-amber-300 text-slate-800 dark:text-slate-200 px-2.5 py-1 rounded-md transition font-medium"
+                className="bg-slate-200 dark:bg-slate-800 hover:bg-emerald-500/20 hover:text-emerald-700 dark:hover:text-emerald-300 text-slate-800 dark:text-slate-200 px-2.5 py-1 rounded-md transition font-medium"
               >
                 {t('auth.adminRole')}
               </button>
@@ -123,7 +123,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="David Navara"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
           )}
@@ -138,7 +138,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               value={isRegister ? email : emailOrNickname}
               onChange={(e) => (isRegister ? setEmail(e.target.value) : setEmailOrNickname(e.target.value))}
               placeholder={isRegister ? 'you@example.com' : 'you@example.com / nickname'}
-              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -152,7 +152,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -166,7 +166,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
                 placeholder="Magnus"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
           )}
@@ -182,7 +182,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   value={chessRating}
                   onChange={(e) => setChessRating(e.target.value)}
                   placeholder="2200"
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
               <div>
@@ -194,7 +194,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   value={fideId}
                   onChange={(e) => setFideId(e.target.value)}
                   placeholder="1234567"
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -203,7 +203,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-semibold py-2.5 rounded-lg transition text-sm shadow-md mt-2"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-semibold py-2.5 rounded-lg transition text-sm shadow-md mt-2"
           >
             {loading ? t('common.loading') : isRegister ? t('auth.register') : t('auth.signIn')}
           </button>
@@ -216,7 +216,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               setIsRegister(!isRegister);
               setError(null);
             }}
-            className="text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+            className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
           >
             {isRegister ? t('auth.signIn') : t('auth.registerNow')}
           </button>

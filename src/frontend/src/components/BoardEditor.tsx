@@ -231,13 +231,14 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
           <input
             type="text"
             value={fenInput}
+            aria-label={t('board.fenPlaceholder')}
             onChange={(event) => {
               setFenInput(event.target.value);
               setFenError(null);
             }}
             placeholder={t('board.fenPlaceholder')}
             spellCheck={false}
-            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-1 text-[11px] font-mono text-slate-900 outline-none transition focus:border-amber-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-1 text-[11px] font-mono text-slate-900 outline-none transition focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
           />
           <button
             type="button"
@@ -258,13 +259,18 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
               tabIndex={0}
               onClick={(event) => armPiece(piece, event)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') armPiece(piece, event);
+                if (event.repeat) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  armPiece(piece, event);
+                }
               }}
               aria-pressed={armedPiece === piece}
+              aria-label={t(armedPiece === piece ? 'board.cancelPlacementPiece' : 'board.placePiece', { piece: getPieceLabel(piece, t) })}
               title={armedPiece === piece ? t('board.cancelPlacement') : t('board.armPieceHint')}
               className={`relative rounded-md p-0.5 transition ${
                 armedPiece === piece ? 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900' : ''
-              }`}
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
             >
               <SparePiece piece={piece} width={spareWidth} dndId={DND_ID} />
               {armedPiece === piece && stickyArmed && <Pin className="absolute -top-1 -right-1 h-3 w-3 text-sky-500" />}
@@ -299,13 +305,18 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
               tabIndex={0}
               onClick={(event) => armPiece(piece, event)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') armPiece(piece, event);
+                if (event.repeat) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  armPiece(piece, event);
+                }
               }}
               aria-pressed={armedPiece === piece}
+              aria-label={t(armedPiece === piece ? 'board.cancelPlacementPiece' : 'board.placePiece', { piece: getPieceLabel(piece, t) })}
               title={armedPiece === piece ? t('board.cancelPlacement') : t('board.armPieceHint')}
               className={`relative rounded-md p-0.5 transition ${
                 armedPiece === piece ? 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900' : ''
-              }`}
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
             >
               <SparePiece piece={piece} width={spareWidth} dndId={DND_ID} />
               {armedPiece === piece && stickyArmed && <Pin className="absolute -top-1 -right-1 h-3 w-3 text-sky-500" />}
@@ -349,7 +360,7 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
             onClick={() => setOrientation((previous) => (previous === 'white' ? 'black' : 'white'))}
             className="text-[11px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-md font-medium border border-slate-300 dark:border-slate-700 transition"
           >
-            {t('chessboard.flip')} ({orientation})
+            {t('chessboard.flip')} ({t(orientation === 'white' ? 'board.orientationWhite' : 'board.orientationBlack')})
           </button>
         </div>
 
@@ -361,7 +372,7 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
               onClick={() => setTurn('w')}
               aria-pressed={turn === 'w'}
               className={`text-[11px] px-2 py-1 rounded-md font-semibold transition ${
-                turn === 'w' ? 'bg-amber-500 text-slate-950' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                turn === 'w' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
               }`}
             >
               {t('board.whiteToMove')}
@@ -371,7 +382,7 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
               onClick={() => setTurn('b')}
               aria-pressed={turn === 'b'}
               className={`text-[11px] px-2 py-1 rounded-md font-semibold transition ${
-                turn === 'b' ? 'bg-amber-500 text-slate-950' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                turn === 'b' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
               }`}
             >
               {t('board.blackToMove')}
@@ -384,7 +395,7 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
         <button
           type="button"
           onClick={loadPosition}
-          className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-600"
+          className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-600"
         >
           <Upload className="h-4 w-4" />
           {t('board.loadPosition')}

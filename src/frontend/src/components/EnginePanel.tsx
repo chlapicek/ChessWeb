@@ -318,7 +318,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ fen, onArrowsChange })
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <BrainCircuit className="h-4 w-4 text-amber-500" />
+          <BrainCircuit className="h-4 w-4 text-emerald-500" />
           <div>
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t('board.engineTitle')}</h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -332,7 +332,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ fen, onArrowsChange })
             onClick={toggleRunning}
             aria-label={settings.running ? t('board.pauseEngine') : t('board.resumeEngine')}
             title={settings.running ? t('board.pauseEngine') : t('board.resumeEngine')}
-            className="rounded-lg bg-amber-500/10 p-2 text-amber-600 transition hover:bg-amber-500/20 dark:text-amber-400"
+            className="rounded-lg bg-emerald-500/10 p-2 text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
           >
             {settings.running ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           </button>
@@ -387,7 +387,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ fen, onArrowsChange })
                   aria-pressed={settings.multiPv === count}
                   className={`h-6 w-6 rounded font-semibold transition ${
                     settings.multiPv === count
-                      ? 'bg-amber-500 text-slate-950'
+                      ? 'bg-emerald-500 text-slate-950'
                       : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
                   }`}
                 >
@@ -406,7 +406,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ fen, onArrowsChange })
               aria-label={settings.showArrows ? t('board.hideArrows') : t('board.showArrows')}
               title={settings.showArrows ? t('board.hideArrows') : t('board.showArrows')}
               onClick={toggleShowArrows}
-              className={`relative h-5 w-9 rounded-full transition ${settings.showArrows ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-800'}`}
+              className={`relative h-5 w-9 rounded-full transition ${settings.showArrows ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-800'}`}
             >
               <span
                 className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${

@@ -304,7 +304,7 @@ export const ArticlesView: React.FC = () => {
           {isAuthenticated ? (
             <button
               onClick={() => setIsCreating(true)}
-              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold px-4 py-2.5 rounded-xl shadow-lg transition text-sm shrink-0"
+              className="brand-button flex items-center gap-2 font-semibold px-4 py-2.5 rounded-xl shadow-lg transition text-sm shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>{t('articles.writeArticle')}</span>
@@ -328,7 +328,7 @@ export const ArticlesView: React.FC = () => {
             setPage(1);
           }}
           placeholder={t('articles.searchPlaceholder')}
-          className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 shadow-sm transition-colors"
+          className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none shadow-sm transition-colors brand-input"
         />
       </div>
 
@@ -367,7 +367,7 @@ export const ArticlesView: React.FC = () => {
                   value={createTitle}
                   onChange={(e) => setCreateTitle(e.target.value)}
                   placeholder="Navara vs Rapport..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-emerald-500"
                 />
               </div>
 
@@ -376,7 +376,7 @@ export const ArticlesView: React.FC = () => {
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
                     {t('articles.content')} (max 30,000 chars) *
                   </label>
-                  <span className={`text-[11px] ${createContent.length > 28000 ? 'text-amber-500' : 'text-slate-400'}`}>
+                  <span className={`text-[11px] ${createContent.length > 28000 ? 'text-emerald-500' : 'text-slate-400'}`}>
                     {createContent.length} / 30,000
                   </span>
                 </div>
@@ -385,7 +385,7 @@ export const ArticlesView: React.FC = () => {
                   required
                   value={createContent}
                   onChange={(e) => setCreateContent(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-amber-500 font-sans"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-emerald-500 font-sans"
                 />
               </div>
 
@@ -398,7 +398,7 @@ export const ArticlesView: React.FC = () => {
                   value={createPgn}
                   onChange={(e) => setCreatePgn(e.target.value)}
                   placeholder="1. e4 e5 2. Nf3 Nc6..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:border-emerald-500"
                 />
               </div>
 
@@ -420,7 +420,7 @@ export const ArticlesView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={createSubmitting}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-lg text-sm transition shadow"
+                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold rounded-lg text-sm transition shadow"
                 >
                   {createSubmitting ? t('articles.publishing') : t('articles.publishArticle')}
                 </button>
@@ -464,7 +464,7 @@ export const ArticlesView: React.FC = () => {
                   maxLength={200}
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-emerald-500"
                 />
               </div>
 
@@ -473,7 +473,7 @@ export const ArticlesView: React.FC = () => {
                   <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
                     {t('articles.content')} (max 30,000 chars) *
                   </label>
-                  <span className={`text-[11px] ${editContent.length > 28000 ? 'text-amber-500' : 'text-slate-400'}`}>
+                  <span className={`text-[11px] ${editContent.length > 28000 ? 'text-emerald-500' : 'text-slate-400'}`}>
                     {editContent.length} / 30,000
                   </span>
                 </div>
@@ -482,7 +482,7 @@ export const ArticlesView: React.FC = () => {
                   required
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-amber-500 font-sans"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:border-emerald-500 font-sans"
                 />
               </div>
 
@@ -494,7 +494,7 @@ export const ArticlesView: React.FC = () => {
                   rows={3}
                   value={editPgn}
                   onChange={(e) => setEditPgn(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:border-amber-500"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-white focus:border-emerald-500"
                 />
               </div>
 
@@ -509,7 +509,7 @@ export const ArticlesView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={editSubmitting}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold rounded-lg text-sm transition shadow"
+                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold rounded-lg text-sm transition shadow"
                 >
                   {editSubmitting ? t('articles.savingChanges') : t('articles.saveChanges')}
                 </button>
@@ -524,7 +524,7 @@ export const ArticlesView: React.FC = () => {
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-md dark:shadow-xl mb-12 transition-colors animate-fade-in">
           <button
             onClick={() => navigate('/articles')}
-            className="text-xs text-amber-600 dark:text-amber-400 hover:underline mb-6 flex items-center gap-1 font-semibold"
+            className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline mb-6 flex items-center gap-1 font-semibold"
           >
             ← {t('common.back')}
           </button>
@@ -537,15 +537,16 @@ export const ArticlesView: React.FC = () => {
 
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400 mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
                 <span className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-medium">
-                  <User className="w-4 h-4 text-amber-500" />
+                  <User className="w-4 h-4 text-emerald-500" />
                   <Link
                     to={`/players/${selectedArticle.authorId}`}
-                    className="rounded-sm hover:text-amber-600 dark:hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                    className="rounded-sm hover:text-emerald-600 dark:hover:text-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                    aria-label={`${t('players.viewProfile')}: ${selectedArticle.authorName}`}
                   >
                     {selectedArticle.authorName}
                   </Link>
                   {selectedArticle.authorRating && (
-                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-mono">
+                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-mono">
                       {selectedArticle.authorRating} Elo
                     </span>
                   )}
@@ -560,7 +561,7 @@ export const ArticlesView: React.FC = () => {
                   <div className="ml-auto flex items-center gap-2">
                     <button
                       onClick={() => openEditModal(selectedArticle)}
-                      className="flex items-center gap-1 text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 transition"
+                      className="flex items-center gap-1 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 transition"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>{t('common.edit')}</span>
@@ -596,7 +597,7 @@ export const ArticlesView: React.FC = () => {
                       title={label}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition ${
                         active
-                          ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 shadow-sm'
+                          ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 shadow-sm'
                           : 'bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
                       }`}
                     >
@@ -620,11 +621,11 @@ export const ArticlesView: React.FC = () => {
                         href={`http://localhost:8080/api/articles/attachments/${att.id}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 rounded-xl transition group"
+                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 rounded-xl transition group"
                       >
                         <div className="flex items-center gap-2.5 truncate">
-                          <FileText className="w-4 h-4 text-amber-500 shrink-0" />
-                          <span className="text-xs text-slate-700 dark:text-slate-200 truncate group-hover:text-amber-600 dark:group-hover:text-amber-300 font-mono">
+                          <FileText className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span className="text-xs text-slate-700 dark:text-slate-200 truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-300 font-mono">
                             {att.fileName}
                           </span>
                         </div>
@@ -638,7 +639,7 @@ export const ArticlesView: React.FC = () => {
               {/* Comments Section */}
               <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-2 mb-6">
-                  <MessageSquare className="w-4 h-4 text-amber-500" />
+                  <MessageSquare className="w-4 h-4 text-emerald-500" />
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
                     {t('articles.comments')} ({selectedArticle.comments.length})
                   </h3>
@@ -660,12 +661,12 @@ export const ArticlesView: React.FC = () => {
                         value={commentText}
                         onChange={(e) => setCommentText(e.target.value)}
                         placeholder={t('articles.leaveCommentPlaceholder')}
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl p-3 text-sm text-slate-900 dark:text-white focus:border-amber-500 pr-24"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl p-3 text-sm text-slate-900 dark:text-white focus:border-emerald-500 pr-24"
                       />
                       <button
                         type="submit"
                         disabled={commentSubmitting || !commentText.trim()}
-                        className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-slate-950 font-semibold px-3 py-1.5 rounded-lg text-xs transition"
+                        className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-slate-950 font-semibold px-3 py-1.5 rounded-lg text-xs transition"
                       >
                         <Send className="w-3.5 h-3.5" />
                         <span>{commentSubmitting ? t('articles.postingComment') : t('articles.postComment')}</span>
@@ -694,7 +695,7 @@ export const ArticlesView: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-slate-800 dark:text-slate-200">{comment.authorName}</span>
                             {comment.authorRating && (
-                              <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 rounded font-mono">
+                              <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.2 rounded font-mono">
                                 {comment.authorRating} Elo
                               </span>
                             )}
@@ -757,23 +758,24 @@ export const ArticlesView: React.FC = () => {
               <div
                 key={art.id}
                 onClick={() => navigate('/articles/' + art.id)}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 rounded-2xl p-6 transition duration-200 cursor-pointer group relative shadow-sm hover-card-animate animate-slide-up"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 rounded-2xl p-6 transition duration-200 cursor-pointer group relative shadow-sm hover-card-animate animate-slide-up"
               >
                 {/* Header: Author + Date */}
                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-2.5">
                   <div className="flex items-center gap-2">
                     <span className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-300">
-                      <User className="w-3.5 h-3.5 text-amber-500" />
+                      <User className="w-3.5 h-3.5 text-emerald-500" />
                       <Link
                         to={`/players/${art.authorId}`}
                         onClick={(event) => event.stopPropagation()}
-                        className="rounded-sm hover:text-amber-600 dark:hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                        className="rounded-sm hover:text-emerald-600 dark:hover:text-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                        aria-label={`${t('players.viewProfile')}: ${art.authorName}`}
                       >
                         {art.authorName}
                       </Link>
                     </span>
                     {art.authorRating && (
-                      <span className="bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 text-[10px] px-1.5 py-0.5 rounded font-mono">
+                      <span className="bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 text-[10px] px-1.5 py-0.5 rounded font-mono">
                         {art.authorRating} Elo
                       </span>
                     )}
@@ -784,7 +786,7 @@ export const ArticlesView: React.FC = () => {
                   {/* Badges */}
                   <div className="flex items-center gap-2">
                     {art.pgnData && (
-                      <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] px-2 py-0.5 rounded font-mono border border-amber-500/30">
+                      <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] px-2 py-0.5 rounded font-mono border border-emerald-500/30">
                         {t('articles.interactiveBoardBadge')}
                       </span>
                     )}
@@ -797,7 +799,7 @@ export const ArticlesView: React.FC = () => {
                 </div>
 
                 {/* Title */}
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition mb-2">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition mb-2">
                   {art.title}
                 </h3>
 
@@ -821,7 +823,7 @@ export const ArticlesView: React.FC = () => {
                           onClick={(e) => handleToggleReaction(art.id, type, e)}
                           className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition ${
                             active
-                              ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40'
+                              ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
                               : 'bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
                           }`}
                         >
@@ -835,7 +837,7 @@ export const ArticlesView: React.FC = () => {
                   {/* Right side: Comments count & Author actions */}
                   <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
-                      <MessageSquare className="w-3.5 h-3.5 text-amber-500" />
+                      <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
                       <span className="text-xs font-medium">{art.commentsCount} {t('articles.commentsCount')}</span>
                     </div>
 
@@ -843,7 +845,7 @@ export const ArticlesView: React.FC = () => {
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={(e) => openEditModal(art, e)}
-                          className="p-1 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition"
+                          className="p-1 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition"
                           title={t('articles.editArticle')}
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -858,7 +860,7 @@ export const ArticlesView: React.FC = () => {
                       </div>
                     )}
 
-                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-500 transition" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition" />
                   </div>
                 </div>
               </div>

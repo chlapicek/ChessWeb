@@ -20,9 +20,9 @@ export const SettingsView: React.FC = () => {
       </div>
 
       <div className="space-y-5">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <section className="theme-panel rounded-2xl p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-3">
-            <Globe className="h-5 w-5 text-amber-500" />
+            <Globe className="h-5 w-5" style={{ color: 'var(--accent)' }} />
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">{t('settings.languageTitle')}</h2>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('settings.languageDescription')}</p>
@@ -34,10 +34,9 @@ export const SettingsView: React.FC = () => {
                 key={language}
                 type="button"
                 onClick={() => changeLanguage(language)}
-                className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                  i18n.language.startsWith(language)
-                    ? 'border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                    : 'border-slate-200 text-slate-700 hover:border-amber-400 dark:border-slate-700 dark:text-slate-300'
+                aria-pressed={i18n.language.startsWith(language)}
+                className={`theme-option rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  i18n.language.startsWith(language) ? 'active' : ''
                 }`}
               >
                 {language === 'en' ? t('settings.english') : t('settings.czech')}
@@ -46,9 +45,9 @@ export const SettingsView: React.FC = () => {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <section className="theme-panel rounded-2xl p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-3">
-            {theme === 'dark' ? <Moon className="h-5 w-5 text-amber-500" /> : <Sun className="h-5 w-5 text-amber-500" />}
+            {theme === 'dark' ? <Moon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <Sun className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">{t('settings.themeTitle')}</h2>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('settings.themeDescription')}</p>
@@ -60,10 +59,9 @@ export const SettingsView: React.FC = () => {
                 key={selectedTheme}
                 type="button"
                 onClick={() => setTheme(selectedTheme)}
-                className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                  theme === selectedTheme
-                    ? 'border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                    : 'border-slate-200 text-slate-700 hover:border-amber-400 dark:border-slate-700 dark:text-slate-300'
+                aria-pressed={theme === selectedTheme}
+                className={`theme-option rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  theme === selectedTheme ? 'active' : ''
                 }`}
               >
                 {selectedTheme === 'light' ? t('common.light') : t('common.dark')}

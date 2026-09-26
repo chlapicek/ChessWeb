@@ -38,9 +38,9 @@ export const PartnersBar: React.FC = () => {
           onClick={() => setIsOpen(true)}
           aria-label={t('partners.open')}
           title={t('partners.open')}
-          className="flex items-center gap-2 rounded-l-xl border border-r-0 border-slate-200/90 bg-white/95 px-2 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 shadow-[-8px_8px_24px_rgba(15,23,42,0.1)] backdrop-blur transition hover:-translate-x-1 hover:text-amber-600 dark:border-slate-800/90 dark:bg-slate-900/95 dark:text-slate-400 dark:hover:text-amber-400"
+          className="flex items-center gap-2 rounded-l-xl border border-r-0 border-slate-200/90 bg-white/95 px-2 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 shadow-[-8px_8px_24px_rgba(15,23,42,0.1)] backdrop-blur transition hover:-translate-x-1 hover:text-emerald-600 dark:border-slate-800/90 dark:bg-slate-900/95 dark:text-slate-400 dark:hover:text-emerald-400"
         >
-          <Handshake className="h-4 w-4 text-amber-500" />
+          <Handshake className="h-4 w-4 text-emerald-500" />
           <span className="hidden sm:inline">{t('partners.title')}</span>
           <PanelRightOpen className="h-4 w-4" />
         </button>
@@ -48,7 +48,7 @@ export const PartnersBar: React.FC = () => {
         <div className="w-[min(18rem,calc(100vw-1rem))] rounded-l-2xl border border-r-0 border-slate-200/90 bg-white/95 p-2 shadow-[-8px_8px_24px_rgba(15,23,42,0.1)] backdrop-blur dark:border-slate-800/90 dark:bg-slate-900/95">
           <div className="flex items-center justify-between border-b border-slate-200 px-2 pb-2 dark:border-slate-700">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              <Handshake className="h-4 w-4 text-amber-500" />
+              <Handshake className="h-4 w-4 text-emerald-500" />
               <span>{t('partners.title')}</span>
             </div>
             <button
@@ -56,7 +56,7 @@ export const PartnersBar: React.FC = () => {
               onClick={() => setIsOpen(false)}
               aria-label={t('partners.close')}
               title={t('partners.close')}
-              className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-amber-600 dark:hover:bg-slate-800 dark:hover:text-amber-400"
+              className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-emerald-600 dark:hover:bg-slate-800 dark:hover:text-emerald-400"
             >
               <PanelRightClose className="h-4 w-4" />
             </button>
@@ -73,7 +73,7 @@ export const PartnersBar: React.FC = () => {
                   target="_blank"
                   rel="noreferrer"
                   aria-label={partner.name}
-                  className="group flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 transition hover:-translate-x-1 hover:border-amber-400/60 hover:bg-amber-50 dark:hover:border-amber-500/50 dark:hover:bg-slate-800"
+                  className="group flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 transition hover:-translate-x-1 hover:border-emerald-400/60 hover:bg-emerald-50 dark:hover:border-emerald-500/50 dark:hover:bg-slate-800"
                 >
                   <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100 text-[10px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                     <img
@@ -86,7 +86,7 @@ export const PartnersBar: React.FC = () => {
                         if (fallback) fallback.style.display = 'flex';
                       }}
                     />
-                    <span className="hidden h-full w-full items-center justify-center bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                    <span className="hidden h-full w-full items-center justify-center bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
                       {getFallbackLabel(partner.name)}
                     </span>
                   </div>
@@ -94,7 +94,7 @@ export const PartnersBar: React.FC = () => {
                     <span className="block truncate text-xs font-semibold text-slate-800 dark:text-slate-200">{partner.name}</span>
                     <span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">{partner.url}</span>
                   </span>
-                  <ExternalLink className="ml-auto h-3 w-3 shrink-0 text-slate-400 transition group-hover:text-amber-500" />
+                  <ExternalLink className="ml-auto h-3 w-3 shrink-0 text-slate-400 transition group-hover:text-emerald-500" />
                 </a>
               ))
             )}

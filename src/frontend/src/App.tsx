@@ -22,7 +22,7 @@ export const AppContent: React.FC = () => {
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="app-shell min-h-screen flex flex-col font-sans transition-colors duration-200">
       <Navbar onOpenLogin={() => setIsAuthOpen(true)} />
 
       <main className="flex-1 animate-fade-in">

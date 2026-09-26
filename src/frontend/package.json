@@ -5,7 +5,9 @@
   "type": "module",
   "description": "React frontend for ChessWeb",
   "scripts": {
+    "predev": "node scripts/copy-stockfish-assets.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-stockfish-assets.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",

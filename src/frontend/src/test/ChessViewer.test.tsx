@@ -145,6 +145,20 @@ describe('ChessViewer PGN support', () => {
 		expect(selector).toHaveValue('0');
 	});
 
+	it('does not hijack arrow keys from links', () => {
+		render(<ThemeProvider><ChessViewer pgn="1. e4 e5 *" /></ThemeProvider>);
+		const link = document.createElement('a');
+		link.href = '#related';
+		document.body.appendChild(link);
+		const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
+
+		link.dispatchEvent(event);
+
+		expect(event.defaultPrevented).toBe(false);
+		expect(screen.queryByText(`${i18n.t('chessboard.move')} 1`)).not.toBeInTheDocument();
+		link.remove();
+	});
+
 	it('highlights the currently selected move', () => {
 		const target = document.createElement('div');
 		document.body.appendChild(target);
@@ -154,6 +168,6 @@ describe('ChessViewer PGN support', () => {
 		fireEvent.click(move);
 
 		expect(move).toHaveAttribute('aria-current', 'step');
-		expect(move.className).toContain('bg-amber-500/15');
+		expect(move.className).toContain('bg-emerald-500/15');
 	});
 });

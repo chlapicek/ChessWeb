@@ -297,7 +297,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
     const handleDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest('button, input, textarea, select, [contenteditable="true"]')) return;
+      if (target?.closest('a[href], button, input, textarea, select, [role="link"], [role="button"], [contenteditable="true"]')) return;
 
       const canMove = event.key === 'ArrowLeft'
         ? currentMoveIndex > -1 || isAnalyzing
@@ -379,10 +379,10 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
 
   const notation = (
     <>
-      {annotationCount > 0 && <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300"><MessageCircle className="h-3.5 w-3.5" />{t('chessboard.annotationsHeading')} ({annotationCount})</div>}
+      {annotationCount > 0 && <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"><MessageCircle className="h-3.5 w-3.5" />{t('chessboard.annotationsHeading')} ({annotationCount})</div>}
       {games.length > 1 && <div className="mt-3 flex items-center justify-between gap-3 text-xs"><label htmlFor={`${gameSelectId}-game`}>{t('chessboard.game')}</label><select id={`${gameSelectId}-game`} value={activeGame} onChange={(event) => setActiveGame(Number(event.target.value))} aria-label={t('chessboard.selectGame')} className="max-w-[75%] rounded-lg border px-2 py-1.5 dark:bg-slate-800">{games.map((item, index) => <option key={index} value={index}>{t('chessboard.gameOption', { number: index + 1, label: item.label || t('chessboard.game') })}</option>)}</select></div>}
       {history.length > 0 && <div className="mt-3 max-h-56 min-h-20 overflow-y-auto rounded-xl border bg-slate-50 p-2 text-xs dark:bg-slate-950">
-        {currentMoveIndex === -1 && !isAnalyzing && <div className="mb-1 rounded border-l-2 border-amber-500 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-sans text-amber-700 dark:text-amber-300">{t('chessboard.initialPosition')}</div>}
+        {currentMoveIndex === -1 && !isAnalyzing && <div className="mb-1 rounded border-l-2 border-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-sans text-emerald-700 dark:text-emerald-300">{t('chessboard.initialPosition')}</div>}
         <div className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1">
           {Array.from({ length: Math.ceil(history.length / 2) }, (_, rowIndex) => {
             const moveNumber = rowIndex + 1;
@@ -395,8 +395,8 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
               const notes = selectedAnnotations[index] ?? [];
               const selected = index === currentMoveIndex && !isAnalyzing;
               return <div className="min-w-0">
-                <button type="button" onClick={() => goToMove(index)} aria-label={`${accessiblePrefix} ${displayMove}`} aria-current={selected ? 'step' : undefined} className={`w-full rounded border-l-2 px-1.5 py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${selected ? 'border-amber-500 bg-amber-500/15 font-bold text-amber-700 dark:text-amber-300' : 'border-transparent text-slate-700 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800'}`}>{displayMove}</button>
-                {notes.length > 0 && <div className="mt-0.5 whitespace-pre-wrap break-words rounded border-l-2 border-amber-500/50 bg-amber-500/5 px-2 py-1 text-xs font-sans leading-relaxed text-slate-600 dark:text-slate-300">{notes.map((note, noteIndex) => <p key={noteIndex}>{formatAnnotationText(note)}</p>)}</div>}
+                <button type="button" onClick={() => goToMove(index)} aria-label={`${accessiblePrefix} ${displayMove}`} aria-current={selected ? 'step' : undefined} className={`w-full rounded border-l-2 px-1.5 py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${selected ? 'border-emerald-500 bg-emerald-500/15 font-bold text-emerald-700 dark:text-emerald-300' : 'border-transparent text-slate-700 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800'}`}>{displayMove}</button>
+                {notes.length > 0 && <div className="mt-0.5 whitespace-pre-wrap break-words rounded border-l-2 border-emerald-500/50 bg-emerald-500/5 px-2 py-1 text-xs font-sans leading-relaxed text-slate-600 dark:text-slate-300">{notes.map((note, noteIndex) => <p key={noteIndex}>{formatAnnotationText(note)}</p>)}</div>}
               </div>;
             };
             return <React.Fragment key={moveNumber}>
@@ -407,7 +407,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
           })}
         </div>
       </div>}
-      <div className="hidden justify-center gap-2 mt-2 lg:flex"><button type="button" onClick={() => setBoardOrientation((orientation) => orientation === 'white' ? 'black' : 'white')} className="whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs">{t('chessboard.flip')} ({boardOrientation})</button></div>
+      <div className="hidden justify-center gap-2 mt-2 lg:flex"><button type="button" onClick={() => setBoardOrientation((orientation) => orientation === 'white' ? 'black' : 'white')} className="whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs">{t('chessboard.flip')} ({t(boardOrientation === 'white' ? 'board.orientationWhite' : 'board.orientationBlack')})</button></div>
     </>
   );
 
@@ -416,7 +416,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
       {/* Interactive status banner */}
       <div className="w-full flex items-center justify-between mb-3 text-xs">
         {isAnalyzing ? (
-          <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/30 font-medium">
+          <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30 font-medium">
             <Sparkles className="w-3.5 h-3.5 animate-pulse" />
             <span>{t('chessboard.interactiveMode')}</span>
           </div>
@@ -430,7 +430,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
           <button
             type="button"
             onClick={resumeGameLine}
-            className="flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-md font-medium border border-slate-300 dark:border-slate-700 transition"
+            className="flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md font-medium border border-slate-300 dark:border-slate-700 transition"
           >
             <RefreshCw className="w-3 h-3" />
             <span>{t('chessboard.resumeGameLine')}</span>
@@ -444,7 +444,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
         role="region"
         aria-label={t('chessboard.boardRegion')}
         aria-describedby={`${gameSelectId}-keyboard-hint`}
-        className="w-full flex justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+        className="w-full flex justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
       >
         <Chessboard
           position={game.fen()}
@@ -486,8 +486,8 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
 
       {/* Custom analysis moves */}
       {isAnalyzing && customMoves.length > 0 && (
-        <div className="w-full mt-3 p-2.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-amber-500/30 text-xs font-mono">
-          <span className="text-amber-600 dark:text-amber-400 font-semibold block mb-1">{t('chessboard.yourMoves')}</span>
+        <div className="w-full mt-3 p-2.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-emerald-500/30 text-xs font-mono">
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold block mb-1">{t('chessboard.yourMoves')}</span>
           <span className="text-slate-800 dark:text-slate-200">{customMoves.join(' ')}</span>
         </div>
       )}

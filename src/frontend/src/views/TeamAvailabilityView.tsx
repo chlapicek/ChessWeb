@@ -317,13 +317,13 @@ export const TeamAvailabilityView: React.FC = () => {
   };
 
   if (authLoading) return <div className="max-w-5xl mx-auto px-4 py-16 text-center text-slate-500">{t('common.loading')}</div>;
-  if (!isAuthenticated) return <div className="max-w-2xl mx-auto px-4 py-16 text-center"><Users className="mx-auto h-10 w-10 text-amber-500" /><h2 className="mt-4 text-xl font-bold">{t('teamAvailability.signInTitle')}</h2><p className="mt-2 text-sm text-slate-500">{t('teamAvailability.signInDesc')}</p></div>;
+  if (!isAuthenticated) return <div className="max-w-2xl mx-auto px-4 py-16 text-center"><Users className="mx-auto h-10 w-10 text-emerald-500" /><h2 className="mt-4 text-xl font-bold">{t('teamAvailability.signInTitle')}</h2><p className="mt-2 text-sm text-slate-500">{t('teamAvailability.signInDesc')}</p></div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2"><CalendarDays className="h-6 w-6 text-amber-500" /><h1 className="text-2xl font-bold">{t('teamAvailability.title')}</h1></div>
+          <div className="flex items-center gap-2"><CalendarDays className="h-6 w-6 text-emerald-500" /><h1 className="text-2xl font-bold">{t('teamAvailability.title')}</h1></div>
           <p className="mt-1 text-sm text-slate-500">{t('teamAvailability.subtitle')}</p>
         </div>
         <button type="button" onClick={() => loadAvailability(selectedTeamId)} disabled={!selectedTeamId || loading || refreshingAvailability} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700"><RefreshCw aria-hidden="true" className={`h-4 w-4 ${refreshingAvailability ? 'animate-spin' : ''}`} />{t('common.refresh')}</button>
@@ -349,18 +349,18 @@ export const TeamAvailabilityView: React.FC = () => {
                   <label className="text-sm font-medium"><span className="block text-xs uppercase tracking-wide text-slate-500">{t('teamAvailability.location')}</span><input type="text" maxLength={300} value={dateForm.location} onChange={(event) => setDateForm((current) => ({ ...current, location: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" /></label>
                   <label className="text-sm font-medium"><span className="block text-xs uppercase tracking-wide text-slate-500">{t('teamAvailability.homeAway')}</span><select value={dateForm.isHomeMatch ? 'home' : 'away'} onChange={(event) => setDateForm((current) => ({ ...current, isHomeMatch: event.target.value === 'home' }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700"><option value="home">{t('teamAvailability.home')}</option><option value="away">{t('teamAvailability.away')}</option></select></label>
                 </div>
-                <button type="submit" disabled={submittingDate} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"><Plus className="h-4 w-4" />{t('teamAvailability.addMatchDate')}</button>
+                <button type="submit" disabled={submittingDate} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"><Plus className="h-4 w-4" />{t('teamAvailability.addMatchDate')}</button>
               </form>
 
               <form onSubmit={addPlayer} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h2 className="text-base font-bold">{t('teamAvailability.addPlayer')}</h2>
                 <div className="mt-4 grid gap-3">
                   <label className="text-sm font-medium"><span className="block text-xs uppercase tracking-wide text-slate-500">{t('teamAvailability.registeredPlayerSearch')}</span><input type="search" value={playerQuery} onChange={(event) => { setPlayerQuery(event.target.value); setSelectedRegisteredPlayer(null); setPlayerValidation(''); }} placeholder={t('teamAvailability.registeredPlayerSearchPlaceholder')} aria-controls="team-availability-player-results" aria-expanded={playerQuery.trim().length >= 1 && playerResults.length > 0} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" /></label>
-                  {selectedRegisteredPlayer ? <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"><span>{selectedRegisteredPlayer.fullName} · {selectedRegisteredPlayer.isTeamMember ? t('teamAvailability.alreadyTeamMember') : t('teamAvailability.willBeAddedToTeam')}</span><button type="button" aria-label={t('teamAvailability.clearSelectedPlayer')} onClick={() => setSelectedRegisteredPlayer(null)}><X className="h-4 w-4" /></button></div> : playerQuery.trim().length >= 1 && <select id="team-availability-player-results" aria-label={t('teamAvailability.registeredPlayerResults')} value="" onChange={(event) => { const selected = playerResults.find((player) => player.userId === event.target.value); if (selected) { setSelectedRegisteredPlayer(selected); setPlayerForm({ playerName: '' }); setPlayerValidation(''); } }} className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm dark:border-slate-700"><option value="">{searchingPlayers ? t('teamAvailability.searchingPlayers') : playerResults.length ? t('teamAvailability.selectRegisteredPlayer') : t('teamAvailability.noRegisteredPlayersFound')}</option>{playerResults.map((player) => <option key={player.userId} value={player.userId}>{player.fullName}{player.chessRating ? ` · ${player.chessRating}` : ''} · {player.isTeamMember ? t('teamAvailability.alreadyTeamMember') : t('teamAvailability.willBeAddedToTeam')}</option>)}</select>}
+                  {selectedRegisteredPlayer ? <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100"><span>{selectedRegisteredPlayer.fullName} · {selectedRegisteredPlayer.isTeamMember ? t('teamAvailability.alreadyTeamMember') : t('teamAvailability.willBeAddedToTeam')}</span><button type="button" aria-label={t('teamAvailability.clearSelectedPlayer')} onClick={() => setSelectedRegisteredPlayer(null)}><X className="h-4 w-4" /></button></div> : playerQuery.trim().length >= 1 && <select id="team-availability-player-results" aria-label={t('teamAvailability.registeredPlayerResults')} value="" onChange={(event) => { const selected = playerResults.find((player) => player.userId === event.target.value); if (selected) { setSelectedRegisteredPlayer(selected); setPlayerForm({ playerName: '' }); setPlayerValidation(''); } }} className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm dark:border-slate-700"><option value="">{searchingPlayers ? t('teamAvailability.searchingPlayers') : playerResults.length ? t('teamAvailability.selectRegisteredPlayer') : t('teamAvailability.noRegisteredPlayersFound')}</option>{playerResults.map((player) => <option key={player.userId} value={player.userId}>{player.fullName}{player.chessRating ? ` · ${player.chessRating}` : ''} · {player.isTeamMember ? t('teamAvailability.alreadyTeamMember') : t('teamAvailability.willBeAddedToTeam')}</option>)}</select>}
                   <label className="text-sm font-medium"><span className="block text-xs uppercase tracking-wide text-slate-500">{t('teamAvailability.customPlayerName')}</span><input type="text" maxLength={150} disabled={!!selectedRegisteredPlayer} value={playerForm.playerName} onChange={(event) => { setPlayerForm((current) => ({ ...current, playerName: event.target.value })); setPlayerValidation(''); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 disabled:opacity-60 dark:border-slate-700" /></label>
                   {playerValidation && <p className="text-sm text-rose-600" role="alert">{playerValidation}</p>}
                 </div>
-                <button type="submit" disabled={submittingPlayer} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"><Plus className="h-4 w-4" />{t('teamAvailability.addPlayer')}</button>
+                <button type="submit" disabled={submittingPlayer} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"><Plus className="h-4 w-4" />{t('teamAvailability.addPlayer')}</button>
               </form>
             </section>
           )}
@@ -371,7 +371,7 @@ export const TeamAvailabilityView: React.FC = () => {
               <form onSubmit={saveSeason} className="mt-4 grid gap-3 sm:grid-cols-3 sm:items-end">
                 <label className="text-sm font-medium"><span className="block text-xs uppercase tracking-wide text-slate-500">{t('teamAvailability.seasonStart')}</span><input type="date" value={seasonForm.seasonStartDate} onChange={(event) => setSeasonForm((current) => ({ ...current, seasonStartDate: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" /></label>
                 <label className="text-sm font-medium"><span className="block text-xs uppercase tracking-wide text-slate-500">{t('teamAvailability.seasonEnd')}</span><input type="date" value={seasonForm.seasonEndDate} onChange={(event) => setSeasonForm((current) => ({ ...current, seasonEndDate: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" /></label>
-                <button type="submit" disabled={savingSeason} className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60">{t('common.save')}</button>
+                <button type="submit" disabled={savingSeason} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60">{t('common.save')}</button>
               </form>
             </section>
           )}
@@ -388,7 +388,7 @@ export const TeamAvailabilityView: React.FC = () => {
                   {refreshingAvailability && <div role="status" className="inline-flex items-center gap-2 text-xs font-medium text-slate-500"><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />{t('teamAvailability.refreshingAvailability')}</div>}
                 </div>
               </div>
-              {refreshError && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"><span>{refreshError}</span><button type="button" onClick={() => loadAvailability(availability.teamId)} disabled={refreshingAvailability} className="font-semibold underline">{t('common.retry')}</button></div>}
+              {refreshError && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100"><span>{refreshError}</span><button type="button" onClick={() => loadAvailability(availability.teamId)} disabled={refreshingAvailability} className="font-semibold underline">{t('common.retry')}</button></div>}
               {showSeasonReport && (
                 <div className="mt-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                   <h3 className="text-sm font-bold">{t('teamAvailability.seasonReport')}</h3>
@@ -436,9 +436,9 @@ export const TeamAvailabilityView: React.FC = () => {
                           <span className="flex items-center gap-2">
                             <span className="font-semibold text-slate-800 dark:text-slate-100">{player.playerName}</span>
                             {canManageTeam ? (
-                              <button type="button" onClick={() => toggleZaklad(player)} disabled={updatingZakladId === player.id} aria-pressed={player.isZaklad} aria-label={t('teamAvailability.zakladToggleLabel', { player: player.playerName })} title={t('teamAvailability.zakladLabel')} className={`inline-flex h-5 w-5 items-center justify-center rounded border text-[11px] font-bold ${player.isZaklad ? 'border-amber-500 bg-amber-500 text-slate-950' : 'border-slate-300 text-slate-400 dark:border-slate-600'} disabled:cursor-not-allowed disabled:opacity-60`}>{t('teamAvailability.zakladBadge')}</button>
+                              <button type="button" onClick={() => toggleZaklad(player)} disabled={updatingZakladId === player.id} aria-pressed={player.isZaklad} aria-label={t('teamAvailability.zakladToggleLabel', { player: player.playerName })} title={t('teamAvailability.zakladLabel')} className={`inline-flex h-5 w-5 items-center justify-center rounded border text-[11px] font-bold ${player.isZaklad ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-300 text-slate-400 dark:border-slate-600'} disabled:cursor-not-allowed disabled:opacity-60`}>{t('teamAvailability.zakladBadge')}</button>
                             ) : player.isZaklad ? (
-                              <span aria-label={t('teamAvailability.zakladLabel')} title={t('teamAvailability.zakladLabel')} className="inline-flex h-5 w-5 items-center justify-center rounded border border-amber-500 bg-amber-500 text-[11px] font-bold text-slate-950">{t('teamAvailability.zakladBadge')}</span>
+                              <span aria-label={t('teamAvailability.zakladLabel')} title={t('teamAvailability.zakladLabel')} className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-500 bg-emerald-500 text-[11px] font-bold text-slate-950">{t('teamAvailability.zakladBadge')}</span>
                             ) : null}
                           </span>
                           <span className="mt-1 flex items-center gap-1">
@@ -453,13 +453,13 @@ export const TeamAvailabilityView: React.FC = () => {
                                   aria-pressed={player.tag === chip.value}
                                   aria-label={t('teamAvailability.tagToggleLabel', { player: player.playerName, tag: t(chip.labelKey) })}
                                   title={t(chip.labelKey)}
-                                  className={`inline-flex h-5 w-5 items-center justify-center rounded border text-[11px] font-bold ${player.tag === chip.value ? 'border-amber-500 bg-amber-500 text-slate-950' : 'border-slate-300 text-slate-400 dark:border-slate-600'} disabled:cursor-not-allowed disabled:opacity-60`}
+                                  className={`inline-flex h-5 w-5 items-center justify-center rounded border text-[11px] font-bold ${player.tag === chip.value ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-300 text-slate-400 dark:border-slate-600'} disabled:cursor-not-allowed disabled:opacity-60`}
                                 >
                                   {chip.letter}
                                 </button>
                               ))
                             ) : player.tag !== noTag ? (
-                              <span aria-label={t(tagOptions[player.tag].labelKey)} title={t(tagOptions[player.tag].labelKey)} className="inline-flex h-5 w-5 items-center justify-center rounded border border-amber-500 bg-amber-500 text-[11px] font-bold text-slate-950">
+                              <span aria-label={t(tagOptions[player.tag].labelKey)} title={t(tagOptions[player.tag].labelKey)} className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-500 bg-emerald-500 text-[11px] font-bold text-slate-950">
                                 {tagChips.find((chip) => chip.value === player.tag)?.letter}
                               </span>
                             ) : null}
@@ -477,9 +477,9 @@ export const TeamAvailabilityView: React.FC = () => {
                             <td key={`player:${axisRenderKey(player.id, playerKey(player))}|match:${axisRenderKey(match.id, matchKey(match))}`} className="border-b border-slate-200 p-3 text-center align-middle dark:border-slate-800">
                               {entry ? (
                                 <div className="flex flex-col items-center gap-1.5">
-                                  <label className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border text-slate-500 focus-within:ring-2 focus-within:ring-amber-500 ${closed ? 'border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950'}`} title={canEdit ? t('teamAvailability.pendingMeansUnchecked') : disabledReason}>
+                                  <label className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border text-slate-500 focus-within:ring-2 focus-within:ring-emerald-500 ${closed ? 'border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950'}`} title={canEdit ? t('teamAvailability.pendingMeansUnchecked') : disabledReason}>
                                     <input type="checkbox" className="sr-only" checked={checked} disabled={!canEdit || savingId === entry.id} aria-label={cellLabel} onChange={(event) => updateEntry(entry, event.target.checked ? availableStatus : pendingStatus)} />
-                                    <span className={`flex h-6 w-6 items-center justify-center rounded border ${checked ? 'border-amber-500 bg-amber-500 text-slate-950' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'} ${!canEdit ? 'opacity-50' : ''}`}>{checked && <Check className="h-4 w-4" />}</span>
+                                    <span className={`flex h-6 w-6 items-center justify-center rounded border ${checked ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'} ${!canEdit ? 'opacity-50' : ''}`}>{checked && <Check className="h-4 w-4" />}</span>
                                     {!canEdit && <span className="sr-only">{disabledReason}</span>}
                                   </label>
                                 </div>
