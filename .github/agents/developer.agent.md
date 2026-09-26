@@ -25,5 +25,12 @@ You are the lead developer implementing changes for the ChessWeb project (ASP.NE
 6. Implement the change, run relevant builds/tests, and fix any failures.
 7. Review the final diff, stage only the completed feature or fix, and create an atomic `AI:` commit.
 
+## Testing Expectations
+- For every new feature or user-facing workflow, identify the right test layers and add or extend tests for the behavior being introduced.
+- Consider browser E2E tests, especially when a feature crosses authentication/authorization, multiple screens, or frontend-to-backend flows. Component and API tests do not replace E2E coverage for a browser workflow.
+- Add at least one focused E2E happy path for substantial user workflows, plus critical permission boundaries where practical. If E2E coverage is unsuitable or unavailable, state why and cover the behavior at the strongest available layer.
+- Mutating E2E tests must fail closed unless explicitly enabled and pointed at a disposable test API/database; isolate or clean up test data, serialize access to shared test databases, and never run role-wide broadcasts against shared data.
+- Run the focused new tests first, then the relevant broader suites and build; report exactly what ran and any environmental limitations.
+
 ## Output Format
 Implement the change directly in the codebase. Summarize: what was built, what UX/Tester/Reviewer feedback was received, and what was changed in response (or why it was deferred).

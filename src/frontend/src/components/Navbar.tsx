@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
@@ -13,7 +13,9 @@ import {
   Crown,
   Users,
   UserCircle,
+  Bell,
 } from 'lucide-react';
+import { apiClient } from '../services/apiClient';
 
 interface NavbarProps {
   onOpenLogin: () => void;
@@ -24,6 +26,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
   const { user, isAuthenticated, logout, isAdmin } = useAuth();
   const location = useLocation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let active = true;
+    const refreshUnreadCount = () => {
+      apiClient.get<{ count: number }>('/notifications/unread-count')
+        .then((response) => { if (active) setUnreadCount(response.data.count); })
+        .catch(() => { if (active) setUnreadCount(0); });
+    };
+    refreshUnreadCount();
+    const intervalId = window.setInterval(refreshUnreadCount, 60_000);
+    window.addEventListener('focus', refreshUnreadCount);
+    window.addEventListener('notifications:refresh', refreshUnreadCount);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshUnreadCount);
+      window.removeEventListener('notifications:refresh', refreshUnreadCount);
+    };
+  }, [isAuthenticated, user?.id, location.pathname]);
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
@@ -109,15 +136,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
         <div className="flex items-center gap-2 sm:gap-3">
           {/* User Auth */}
           {isAuthenticated && user ? (
+              <Link
+                to="/notifications"
+                aria-label={t('notifications.bellLabel', { count: unreadCount })}
+                title={t('notifications.bellLabel', { count: unreadCount })}
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Bell className="h-4 w-4" aria-hidden="true" />
+                {unreadCount > 0 && (
+                  <span aria-hidden="true" className="absolute -right-1 -top-1 min-w-5 rounded-full border border-white bg-rose-600 px-1 text-center text-[10px] font-bold leading-4 text-white dark:border-slate-900">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </Link>
             <div className="flex items-center gap-2 sm:gap-3">
               <Link
                 to={`/players/${user.id}`}
                 className="text-right rounded-md hover:text-amber-600 dark:hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
               >
-                <p className="text-xs font-semibold text-slate-900 dark:text-white">{user.nickname || user.fullName}</p>
-                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
-                  {user.roles.join(', ') || t('common.member')}
-                </p>
+                <UserCircle className="h-5 w-5 sm:hidden" aria-hidden="true" />
+                <span className="hidden sm:block">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white">{user.nickname || user.fullName}</p>
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
+                    {user.roles.map((role) => t(`common.roleNames.${role}`, { defaultValue: role })).join(', ') || t('common.member')}
+                  </p>
+                </span>
               </Link>
               <button
                 onClick={logout}

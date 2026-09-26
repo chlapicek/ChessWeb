@@ -357,7 +357,7 @@ export const AdminView: React.FC = () => {
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400'
                           }`}
                         >
-                          {r}
+                          {t(`common.roleNames.${r}`, { defaultValue: r })}
                         </span>
                       ))}
                     </div>
@@ -381,7 +381,18 @@ export const AdminView: React.FC = () => {
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200'
                         }`}
                       >
-                        Admin
+                        {t('common.roleNames.Admin')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleRole(u, 'ClubMember')}
+                        aria-pressed={u.roles?.includes('ClubMember')}
+                        className={`text-[10px] px-2.5 py-1 rounded transition border ${
+                          u.roles?.includes('ClubMember')
+                            ? 'bg-emerald-700 text-white font-bold border-emerald-700'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
                       </button>
                       {isSuperAdmin && (
                         <button

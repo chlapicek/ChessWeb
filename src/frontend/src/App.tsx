@@ -15,6 +15,7 @@ import { SettingsView } from './views/SettingsView';
 import { TeamAvailabilityView } from './views/TeamAvailabilityView';
 import { PlayersView } from './views/PlayersView';
 import { PlayerProfileView } from './views/PlayerProfileView';
+import { NotificationsView } from './views/NotificationsView';
 
 export const AppContent: React.FC = () => {
   const { t } = useTranslation();
@@ -35,6 +36,7 @@ export const AppContent: React.FC = () => {
           <Route path="/players/:id" element={<PlayerProfileView />} />
           <Route path="/board" element={<BoardView />} />
           <Route path="/settings" element={<SettingsView />} />
+          <Route path="/notifications" element={<NotificationsView />} />
           <Route path="/admin" element={<AdminView />} />
           <Route path="*" element={<Navigate to="/articles" replace />} />
         </Routes>

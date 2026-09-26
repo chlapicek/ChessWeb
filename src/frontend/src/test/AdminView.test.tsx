@@ -102,7 +102,8 @@ const loginAs = (roles: string[]) => {
 };
 
 describe('AdminView', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
     localStorage.clear();
     apiMocks.get.mockReset();
     apiMocks.post.mockReset();

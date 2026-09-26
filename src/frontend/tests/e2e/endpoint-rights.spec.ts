@@ -1,6 +1,6 @@
 import { expect, request, test, type APIRequestContext, type APIResponse } from '@playwright/test';
+import { apiBaseUrl, mutationTargetSkipReason, safeMutationTarget } from './testApiSafety';
 
-const apiBaseUrl = process.env.API_BASE_URL ?? 'http://localhost:8080';
 const emptyGuid = '00000000-0000-0000-0000-000000000000';
 
 type Credentials = {
@@ -21,6 +21,11 @@ const protectedEndpoints: EndpointCase[] = [
   { method: 'get', path: '/api/auth/me' },
   { method: 'get', path: '/api/auth/users' },
   { method: 'post', path: '/api/auth/change-roles', body: {} },
+  { method: 'get', path: '/api/notifications' },
+  { method: 'get', path: '/api/notifications/unread-count' },
+  { method: 'get', path: '/api/notifications/audience-options' },
+  { method: 'post', path: '/api/notifications', body: {} },
+  { method: 'put', path: `/api/notifications/${emptyGuid}/read` },
   { method: 'post', path: '/api/partners/upload' },
   { method: 'post', path: '/api/articles', body: {} },
   { method: 'put', path: `/api/articles/${emptyGuid}`, body: {} },
@@ -70,7 +75,7 @@ const protectedEndpoints: EndpointCase[] = [
 
 const publicEndpoints: EndpointCase[] = [
   { method: 'post', path: '/api/auth/register', body: {}, expectedStatus: 400 },
-  { method: 'post', path: '/api/auth/login', body: { email: 'invalid@example.com', password: 'invalid' }, expectedStatus: 401 },
+  { method: 'post', path: '/api/auth/login', body: { emailOrNickname: 'invalid@example.com', password: 'invalid' }, expectedStatus: 401 },
   { method: 'get', path: '/api/articles', expectedStatus: 200 },
   { method: 'get', path: `/api/articles/${emptyGuid}`, expectedStatus: 404 },
   { method: 'get', path: `/api/articles/attachments/${emptyGuid}`, expectedStatus: 404 },
@@ -98,7 +103,7 @@ async function register(api: APIRequestContext, label: string): Promise<Credenti
 }
 
 async function login(api: APIRequestContext, email: string, password: string): Promise<Credentials> {
-  const response = await api.post('/api/auth/login', { data: { email, password } });
+  const response = await api.post('/api/auth/login', { data: { emailOrNickname: email, password } });
   expect(response.status(), await response.text()).toBe(200);
   const auth = await response.json();
   return { email, password, userId: auth.user.id, token: auth.token };
@@ -114,6 +119,8 @@ function authorizedApi(token: string): Promise<APIRequestContext> {
 test.describe.configure({ mode: 'serial' });
 
 test.describe('endpoint authentication matrix', () => {
+  test.skip(!safeMutationTarget, mutationTargetSkipReason);
+
   test('every public endpoint is reachable without authentication', async () => {
     const api = await request.newContext({ baseURL: apiBaseUrl });
     try {
@@ -140,6 +147,8 @@ test.describe('endpoint authentication matrix', () => {
 });
 
 test.describe('role and ownership rights', () => {
+  test.skip(!safeMutationTarget, mutationTargetSkipReason);
+
   test('registered users cannot access Admin or SuperAdmin endpoints', async () => {
     const api = await request.newContext({ baseURL: apiBaseUrl });
     const user = await register(api, 'rights');
@@ -181,6 +190,9 @@ test.describe('role and ownership rights', () => {
       expect((await authenticated.get('/api/logging/settings')).status()).toBe(403);
       expect((await authenticated.put('/api/logging/settings', { data: { minimumLevel: 'Debug', retainedFileCountLimit: 7 } })).status()).toBe(403);
       expect((await authenticated.put(`/api/player/${user.userId}`, { data: { fullName: 'Changed', email: user.email } })).status()).toBe(403);
+      expect((await authenticated.post('/api/notifications', {
+        data: { title: 'Unauthorized', message: 'Not a captain or administrator', audience: 'admin', userIds: [user.userId] },
+      })).status()).toBe(403);
     } finally {
       await authenticated.dispose();
       await api.dispose();

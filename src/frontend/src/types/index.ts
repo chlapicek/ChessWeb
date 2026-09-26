@@ -8,6 +8,43 @@ export interface User {
   roles: string[];
 }
 
+export interface NotificationAudienceTeam {
+  id: string;
+  name: string;
+}
+
+export interface NotificationAudienceUser {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+export interface NotificationAudienceOptions {
+  teams: NotificationAudienceTeam[];
+  users: NotificationAudienceUser[];
+  roles: string[];
+  isAdministrator: boolean;
+}
+
+export interface NotificationInboxItem {
+  id: string;
+  title: string;
+  message: string;
+  internalLink?: string;
+  senderName: string;
+  createdAt: string;
+  isRead: boolean;
+  readAt?: string;
+}
+
+export interface NotificationInbox {
+  items: NotificationInboxItem[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
 export interface Team {
   id: string;
   name: string;

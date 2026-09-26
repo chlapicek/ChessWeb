@@ -124,6 +124,7 @@ builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddHttpClient<ICalendarSyncService, CalendarSyncService>();
 builder.Services.AddScoped<ICalendarSyncService, CalendarSyncService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton(TimeProvider.System);
 
 // 5. CORS

@@ -27,6 +27,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<GameCollectionGame> GameCollectionGames => Set<GameCollectionGame>();
     public DbSet<LoggingSettings> LoggingSettings => Set<LoggingSettings>();
     public DbSet<EventSubscription> EventSubscriptions => Set<EventSubscription>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationRecipient> NotificationRecipients => Set<NotificationRecipient>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -229,6 +231,25 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             entity.HasIndex(s => new { s.UserId, s.CalendarEventId }).IsUnique();
             entity.HasOne(s => s.User).WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(s => s.Event).WithMany().HasForeignKey(s => s.CalendarEventId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(notification => notification.Id);
+            entity.Property(notification => notification.Title).IsRequired().HasMaxLength(120);
+            entity.Property(notification => notification.Message).IsRequired().HasMaxLength(4000);
+            entity.Property(notification => notification.InternalLink).HasMaxLength(300);
+            entity.Property(notification => notification.SenderName).IsRequired().HasMaxLength(200);
+            entity.HasIndex(notification => new { notification.CreatedAt, notification.Id });
+            entity.HasOne(notification => notification.SenderUser).WithMany().HasForeignKey(notification => notification.SenderUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<NotificationRecipient>(entity =>
+        {
+            entity.HasKey(recipient => new { recipient.NotificationId, recipient.UserId });
+            entity.HasIndex(recipient => new { recipient.UserId, recipient.NotificationId });
+            entity.HasOne(recipient => recipient.Notification).WithMany(notification => notification.Recipients).HasForeignKey(recipient => recipient.NotificationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(recipient => recipient.User).WithMany().HasForeignKey(recipient => recipient.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
