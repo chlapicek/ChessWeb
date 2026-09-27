@@ -415,18 +415,10 @@ public static class DbInitializer
         // 4. Seed sample articles with varied content and optional PGN data.
         if (adminUser != null)
         {
-            var articleSamples = new[]
-            {
-                ("Immortal Game: Adolf Anderssen vs Lionel Kieseritzky (1851)", "The famous King's Gambit attacking game.", "The Immortal Game remains a model of initiative, sacrifice, and coordination.", "1. e4 e5 2. f4 exf4 3. Bc4 Qh4+ 4. Kf1 b5 5. Bxb5 Nf6 6. Nf3 Qh6 7. d3 Nh5 8. Nh4 Qg5 9. Nf5 c6 10. g4 Nf6 11. Rg1 cxb5 12. h4 Qg6 13. h5 Qg5 14. Qf3 Ng8 15. Bxf4 Qf6 16. Nc3 Bc5 17. Nd5 Qxb2 18. Bd6 Bxg1 19. e5 Qxa1+ 20. Ke2 Na6 21. Nxg7+ Kd8 22. Qf6+ Nxf6 23. Be7# 1-0"),
-                ("Sicilian Defence: Choosing the Right Plan", "A practical guide to common Sicilian middlegames.", "The Sicilian creates asymmetry from the first move. Focus on development, king safety, and the typical pawn breaks before calculating short tactics.", null),
-                ("Three Endgame Rules Every Club Player Should Know", "Simple habits that turn equal endgames into reliable points.", "Activate the king, place rooks behind passed pawns, and calculate pawn races exactly. These rules are simple, but applying them consistently wins many practical games.", null),
-                ("How to Build a Weekly Calculation Routine", "A training plan for improving visualization and candidate moves.", "Use short daily sessions: solve a few positions without moving the pieces, write down all candidate moves, and compare your calculation with the solution afterward.", null),
-                ("Annotated Club Game: Attacking on the Open File", "A complete club-level game with turning points and positional lessons.", "This game shows how a modest space advantage becomes a direct attack after an open file is occupied by both rooks.", "1. d4 Nf6 2. c4 e6 3. Nc3 Bb4 4. e3 O-O 5. Bd3 d5 6. Nf3 c5 7. O-O Nc6 8. a3 Bxc3 9. bxc3 dxc4 10. Bxc4")
-            };
-
             var articleCount = await context.Articles.CountAsync();
-            foreach (var (title, summary, content, pgnData) in articleSamples)
+            for (var index = 0; index < ArticleSamples.Length; index++)
             {
+                var (title, summary, content, pgnData) = ArticleSamples[index];
                 if (articleCount >= 5 || await context.Articles.AnyAsync(a => a.Title == title))
                 {
                     continue;
@@ -441,7 +433,7 @@ public static class DbInitializer
                     PgnData = pgnData,
                     FenData = pgnData == null ? null : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                     AuthorId = adminUser.Id,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow.AddDays(-7 * (index + 1))
                 });
                 articleCount++;
             }
@@ -498,7 +490,21 @@ public static class DbInitializer
         }
 
         await context.SaveChangesAsync();
+
+        if (adminUser != null)
+        {
+            await DemoDataSeeder.SeedAsync(context, adminUser, testPlayers.Select(player => player.Item1).ToArray(), ArticleSamples.Select(sample => sample.Title).ToArray());
+        }
     }
+
+    private static readonly (string Title, string Summary, string Content, string? Pgn)[] ArticleSamples =
+    [
+        ("Immortal Game: Adolf Anderssen vs Lionel Kieseritzky (1851)", "The famous King's Gambit attacking game.", "The Immortal Game remains a model of initiative, sacrifice, and coordination.", "1. e4 e5 2. f4 exf4 3. Bc4 Qh4+ 4. Kf1 b5 5. Bxb5 Nf6 6. Nf3 Qh6 7. d3 Nh5 8. Nh4 Qg5 9. Nf5 c6 10. g4 Nf6 11. Rg1 cxb5 12. h4 Qg6 13. h5 Qg5 14. Qf3 Ng8 15. Bxf4 Qf6 16. Nc3 Bc5 17. Nd5 Qxb2 18. Bd6 Bxg1 19. e5 Qxa1+ 20. Ke2 Na6 21. Nxg7+ Kd8 22. Qf6+ Nxf6 23. Be7# 1-0"),
+        ("Sicilian Defence: Choosing the Right Plan", "A practical guide to common Sicilian middlegames.", "The Sicilian creates asymmetry from the first move. Focus on development, king safety, and the typical pawn breaks before calculating short tactics.", null),
+        ("Three Endgame Rules Every Club Player Should Know", "Simple habits that turn equal endgames into reliable points.", "Activate the king, place rooks behind passed pawns, and calculate pawn races exactly. These rules are simple, but applying them consistently wins many practical games.", null),
+        ("How to Build a Weekly Calculation Routine", "A training plan for improving visualization and candidate moves.", "Use short daily sessions: solve a few positions without moving the pieces, write down all candidate moves, and compare your calculation with the solution afterward.", null),
+        ("Annotated Club Game: Attacking on the Open File", "A complete club-level game with turning points and positional lessons.", "This game shows how a modest space advantage becomes a direct attack after an open file is occupied by both rooks.", "1. d4 Nf6 2. c4 e6 3. Nc3 Bb4 4. e3 O-O 5. Bd3 d5 6. Nf3 c5 7. O-O Nc6 8. a3 Bxc3 9. bxc3 dxc4 10. Bxc4")
+    ];
 
     private static async Task RemoveRetiredFeatureSchemaAsync(ApplicationDbContext context)
     {

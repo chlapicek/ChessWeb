@@ -821,6 +821,59 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task DbInitializer_SeedsDemoTeamsWithAvailabilityMatrix()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        foreach (var teamName in new[] { "ŠK Praha A", "ŠK Praha B", "ŠK Praha Mládež" })
+        {
+            var team = await context.Teams.Include(t => t.Memberships).AsNoTracking().FirstOrDefaultAsync(t => t.Name == teamName);
+            Assert.NotNull(team);
+            Assert.NotEmpty(team!.Memberships);
+            Assert.Contains(team.Memberships, m => m.UserId == team.CaptainUserId);
+
+            var dates = await context.TeamAvailabilityDates.CountAsync(d => d.TeamId == team.Id);
+            var players = await context.TeamAvailabilityPlayers.CountAsync(p => p.TeamId == team.Id);
+            Assert.True(dates > 0 && players > 0);
+            Assert.Equal(dates * players, await context.TeamAvailabilityEntries.CountAsync(e => e.TeamId == team.Id));
+            Assert.InRange(await context.TeamAvailabilityPlayers.CountAsync(p => p.TeamId == team.Id && p.Tag != MatchPlayerTag.None), 0, 3);
+        }
+
+        var membershipsPerUser = await context.TeamMemberships.GroupBy(m => m.UserId).Select(g => g.Count()).ToListAsync();
+        Assert.All(membershipsPerUser, count => Assert.InRange(count, 1, ChessWeb.Services.TeamService.MaxTeamsPerUser));
+
+        var admin = await context.Users.FirstAsync(u => u.Email == "admin@chessweb.local");
+        var collection = await context.GameCollections.Include(c => c.Games).AsNoTracking().FirstOrDefaultAsync(c => c.Name == "Classic Miniatures" && c.CreatedByUserId == admin.Id);
+        Assert.NotNull(collection);
+        Assert.NotEmpty(collection!.Games);
+        Assert.True(await context.Articles.AnyAsync(a => a.GameCollectionId == collection.Id));
+    }
+
+    [Fact]
+    public async Task DbInitializer_DemoSeedIsIdempotent()
+    {
+        async Task<int[]> CountAsync()
+        {
+            using var scope = _factory.Services.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var demoTeamIds = await context.Teams.Where(t => t.Name.StartsWith("ŠK Praha")).Select(t => t.Id).ToListAsync();
+            return
+            [
+                demoTeamIds.Count,
+                await context.TeamAvailabilityEntries.CountAsync(e => demoTeamIds.Contains(e.TeamId)),
+                await context.CalendarEvents.CountAsync(e => e.Title == "Weekly Club Night" || e.Title == "Youth Training" || e.Category == CalendarEventCategory.LeagueMatch),
+                await context.GameCollections.CountAsync(c => c.Name == "Classic Miniatures"),
+                await context.Articles.CountAsync(a => a.Title == "Classic Miniatures Every Player Should Know"),
+                await context.Notifications.CountAsync(n => n.Title == "Weekly Club Night moves to the main hall")
+            ];
+        }
+
+        var before = await CountAsync();
+        await DbInitializer.SeedAsync(_factory.Services);
+        Assert.Equal(before, await CountAsync());
+    }
+
+    [Fact]
     public async Task Admin_CanManagePartners()
     {
         var client = _factory.CreateClient();
