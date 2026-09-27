@@ -1,11 +1,15 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using ChessWeb.Data;
 using ChessWeb.Domain.Entities;
 using ChessWeb.Domain.Enums;
 using ChessWeb.Middleware;
 using ChessWeb.Services;
+using ChessWeb.Services.Uploads;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -122,11 +126,31 @@ if (!string.IsNullOrWhiteSpace(fileStorageProvider) &&
     throw new InvalidOperationException($"Unsupported file storage provider '{fileStorageProvider}'. Only Local storage is available.");
 }
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+builder.Services.AddSingleton<IUploadSanitizer, UploadSanitizer>();
+builder.Services.Configure<ClamAvOptions>(builder.Configuration.GetSection(ClamAvOptions.SectionName));
+if (builder.Configuration.GetValue<bool>($"{ClamAvOptions.SectionName}:Enabled"))
+{
+    builder.Services.AddSingleton<IMalwareScanner, ClamAvMalwareScanner>();
+    builder.Services.AddHostedService<AttachmentRescanService>();
+}
+else
+{
+    builder.Services.AddSingleton<IMalwareScanner, DisabledMalwareScanner>();
+}
 builder.Services.AddHttpClient<ICalendarSyncService, CalendarSyncService>();
 builder.Services.AddScoped<ICalendarSyncService, CalendarSyncService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton(TimeProvider.System);
+
+var uploadPermitsPerMinute = builder.Configuration.GetValue(UploadRateLimit.ConfigurationKey, UploadRateLimit.DefaultPermitsPerMinute);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(UploadRateLimit.PolicyName, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = uploadPermitsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 
 // 5. CORS (bearer tokens only, so no credentials are allowed cross-origin). Production is same-origin via nginx.
 var trustedOrigins = new TrustedOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? []);
@@ -170,12 +194,17 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+else if (!app.Services.GetRequiredService<IMalwareScanner>().IsEnabled)
+{
+    app.Logger.LogWarning("Malware scanning is disabled (ClamAv:Enabled=false); uploads are accepted without an antivirus check.");
+}
 
 app.UseCors("AllowFrontend");
 app.UseMiddleware<CsrfProtectionMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 

@@ -1,4 +1,5 @@
 using ChessWeb.Services;
+using ChessWeb.Services.Uploads;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -17,31 +18,37 @@ public class FileStorageServiceTests
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "chessweb-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempRoot);
-
-        var env = new Mock<IWebHostEnvironment>();
-        env.SetupGet(e => e.ContentRootPath).Returns(_tempRoot);
-
-        _service = new LocalFileStorageService(env.Object, NullLogger<LocalFileStorageService>.Instance);
+        _service = CreateService(_tempRoot);
     }
+
+    private static LocalFileStorageService CreateService(string contentRoot, IConfiguration? configuration = null, IMalwareScanner? scanner = null)
+    {
+        var env = new Mock<IWebHostEnvironment>();
+        env.SetupGet(e => e.ContentRootPath).Returns(contentRoot);
+        return new LocalFileStorageService(env.Object, NullLogger<LocalFileStorageService>.Instance, new UploadSanitizer(), scanner ?? new DisabledMalwareScanner(), configuration);
+    }
+
+    private static FormFile CreateFile(byte[] bytes, string fileName, string contentType) =>
+        new(new MemoryStream(bytes), 0, bytes.Length, "file", fileName)
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = contentType
+        };
 
     [Fact]
     public async Task SaveFileAsync_WithValidFile_SavesAndReturnsMetadata()
     {
-        var file = new FormFile(new MemoryStream(new byte[] { 1, 2, 3, 4 }), 0, 4, "file", "sample.png")
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = "image/png"
-        };
+        var file = CreateFile(TestImages.Png(), "sample.png", "application/x-spoofed");
 
         var result = await _service.SaveFileAsync(file, "articles");
 
         Assert.NotNull(result.storedFileName);
         Assert.EndsWith(".png", result.storedFileName);
         Assert.Equal("image/png", result.contentType);
-        Assert.Equal(4, result.sizeBytes);
 
         var filePath = Path.Combine(_tempRoot, "App_Data", "Uploads", "articles", result.storedFileName);
         Assert.True(File.Exists(filePath));
+        Assert.Equal(new FileInfo(filePath).Length, result.sizeBytes);
     }
 
     [Fact]
@@ -54,16 +61,9 @@ public class FileStorageServiceTests
                 ["FileStorage:BasePath"] = configuredRoot
             })
             .Build();
-        var env = new Mock<IWebHostEnvironment>();
-        env.SetupGet(e => e.ContentRootPath).Returns(Path.Combine(_tempRoot, "unused-content-root"));
-        var service = new LocalFileStorageService(env.Object, NullLogger<LocalFileStorageService>.Instance, configuration);
-        var file = new FormFile(new MemoryStream(new byte[] { 1, 2, 3 }), 0, 3, "file", "sample.png")
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = "image/png"
-        };
+        var service = CreateService(Path.Combine(_tempRoot, "unused-content-root"), configuration);
 
-        var (storedFileName, _, _) = await service.SaveFileAsync(file, "articles");
+        var (storedFileName, _, _) = await service.SaveFileAsync(CreateFile(TestImages.Png(), "sample.png", "image/png"), "articles");
 
         Assert.True(File.Exists(Path.Combine(configuredRoot, "articles", storedFileName)));
         Assert.False(File.Exists(Path.Combine(_tempRoot, "unused-content-root", "App_Data", "Uploads", "articles", storedFileName)));
@@ -78,16 +78,9 @@ public class FileStorageServiceTests
                 ["FileStorage:BasePath"] = ""
             })
             .Build();
-        var env = new Mock<IWebHostEnvironment>();
-        env.SetupGet(e => e.ContentRootPath).Returns(_tempRoot);
-        var service = new LocalFileStorageService(env.Object, NullLogger<LocalFileStorageService>.Instance, configuration);
-        var file = new FormFile(new MemoryStream(new byte[] { 1, 2, 3 }), 0, 3, "file", "sample.png")
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = "image/png"
-        };
+        var service = CreateService(_tempRoot, configuration);
 
-        var (storedFileName, _, _) = await service.SaveFileAsync(file, "articles");
+        var (storedFileName, _, _) = await service.SaveFileAsync(CreateFile(TestImages.Png(), "sample.png", "image/png"), "articles");
 
         Assert.True(File.Exists(Path.Combine(_tempRoot, "App_Data", "Uploads", "articles", storedFileName)));
     }
@@ -95,36 +88,47 @@ public class FileStorageServiceTests
     [Fact]
     public async Task SaveFileAsync_WithUnsupportedExtension_Throws()
     {
-        var file = new FormFile(new MemoryStream(new byte[] { 1, 2, 3 }), 0, 3, "file", "sample.exe")
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = "application/octet-stream"
-        };
+        var file = CreateFile([1, 2, 3], "sample.exe", "application/octet-stream");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SaveFileAsync(file, "articles"));
+        await Assert.ThrowsAsync<UploadRejectedException>(() => _service.SaveFileAsync(file, "articles"));
     }
 
     [Fact]
     public async Task SaveFileAsync_WithOversizedFile_Throws()
     {
         var oversizedBytes = new byte[LocalFileStorageService.MaxFileSizeBytes + 1];
-        var file = new FormFile(new MemoryStream(oversizedBytes), 0, oversizedBytes.Length, "file", "big.png")
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = "image/png"
-        };
+        var file = CreateFile(oversizedBytes, "big.png", "image/png");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SaveFileAsync(file, "articles"));
+        await Assert.ThrowsAsync<UploadRejectedException>(() => _service.SaveFileAsync(file, "articles"));
+    }
+
+    [Fact]
+    public async Task SaveFileAsync_WhenScannerDetectsMalware_RejectsAndStoresNothing()
+    {
+        var scanner = new Mock<IMalwareScanner>();
+        scanner.Setup(s => s.ScanAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ReturnsAsync(new MalwareScanResult(false, "Eicar-Test-Signature"));
+        var service = CreateService(_tempRoot, scanner: scanner.Object);
+
+        await Assert.ThrowsAsync<UploadRejectedException>(() => service.SaveFileAsync(CreateFile("hello"u8.ToArray(), "notes.txt", "text/plain"), "articles"));
+
+        var articlesDir = Path.Combine(_tempRoot, "App_Data", "Uploads", "articles");
+        Assert.True(!Directory.Exists(articlesDir) || Directory.GetFiles(articlesDir).Length == 0);
+    }
+
+    [Fact]
+    public async Task SaveFileAsync_WhenScannerUnavailable_FailsClosed()
+    {
+        var scanner = new Mock<IMalwareScanner>();
+        scanner.Setup(s => s.ScanAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ThrowsAsync(new MalwareScannerUnavailableException("down"));
+        var service = CreateService(_tempRoot, scanner: scanner.Object);
+
+        await Assert.ThrowsAsync<MalwareScannerUnavailableException>(() => service.SaveFileAsync(CreateFile("hello"u8.ToArray(), "notes.txt", "text/plain"), "articles"));
     }
 
     [Fact]
     public async Task DeleteFileAsync_DeletesExistingFile()
     {
-        var file = new FormFile(new MemoryStream(new byte[] { 9, 8, 7 }), 0, 3, "file", "sample.txt")
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = "text/plain"
-        };
+        var file = CreateFile("chess notes"u8.ToArray(), "sample.txt", "text/plain");
         var (storedFileName, _, _) = await _service.SaveFileAsync(file, "articles");
 
         var deleted = await _service.DeleteFileAsync(storedFileName, "articles");

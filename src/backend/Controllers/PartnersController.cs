@@ -3,8 +3,10 @@ using ChessWeb.Domain.Entities;
 using ChessWeb.Domain.Enums;
 using ChessWeb.DTOs;
 using ChessWeb.Services;
+using ChessWeb.Services.Uploads;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChessWeb.Controllers;
@@ -13,6 +15,7 @@ namespace ChessWeb.Controllers;
 [Route("api/[controller]")]
 public class PartnersController : ControllerBase
 {
+    private const string LogosFolder = "partners";
     private readonly ApplicationDbContext _context;
     private readonly IFileStorageService _fileStorage;
 
@@ -20,6 +23,28 @@ public class PartnersController : ControllerBase
     {
         _context = context;
         _fileStorage = fileStorage;
+    }
+
+    private async Task<(string StoredFileName, ActionResult? Error)> SaveLogoAsync(IFormFile logoFile)
+    {
+        if (!UploadSanitizer.IsImageExtension(Path.GetExtension(logoFile.FileName)))
+        {
+            return (string.Empty, BadRequest(new { message = "Partner logos must be JPG, PNG, GIF or WebP images." }));
+        }
+
+        try
+        {
+            var (storedFileName, _, _) = await _fileStorage.SaveFileAsync(logoFile, LogosFolder, HttpContext.RequestAborted);
+            return (storedFileName, null);
+        }
+        catch (UploadRejectedException exception)
+        {
+            return (string.Empty, BadRequest(new { message = $"Error with file '{logoFile.FileName}': {exception.Message}" }));
+        }
+        catch (UploadUnavailableException)
+        {
+            return (string.Empty, StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = UploadUnavailableException.UserMessage }));
+        }
     }
 
     [HttpGet]
@@ -69,6 +94,7 @@ public class PartnersController : ControllerBase
     }
 
     [HttpPost("upload")]
+    [EnableRateLimiting(UploadRateLimit.PolicyName)]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<Partner>> UploadPartnerLogo(
         [FromForm] string name,
@@ -92,14 +118,10 @@ public class PartnersController : ControllerBase
             return BadRequest(new { message = "A partner logo image is required." });
         }
 
-        string storedFileName;
-        try
+        var (storedFileName, uploadError) = await SaveLogoAsync(logoFile);
+        if (uploadError != null)
         {
-            (storedFileName, _, _) = await _fileStorage.SaveFileAsync(logoFile, "partners");
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { message = $"Error with file '{logoFile.FileName}': {ex.Message}" });
+            return uploadError;
         }
 
         var partner = new Partner
@@ -117,13 +139,22 @@ public class PartnersController : ControllerBase
         partner.LogoUrl = $"/api/partners/{partner.Id}/logo";
 
         _context.Partners.Add(partner);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch
+        {
+            await _fileStorage.DeleteFileAsync(storedFileName, LogosFolder);
+            throw;
+        }
 
         return Ok(partner);
     }
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = Roles.Admin)]
+    [EnableRateLimiting(UploadRateLimit.PolicyName)]
     public async Task<ActionResult<Partner>> UpdatePartner(
         Guid id,
         [FromForm] string name,
@@ -151,32 +182,38 @@ public class PartnersController : ControllerBase
         string? replacementFileName = null;
         if (logoFile is { Length: > 0 })
         {
-            try
+            var (storedFileName, uploadError) = await SaveLogoAsync(logoFile);
+            if (uploadError != null)
             {
-                var (storedFileName, _, _) = await _fileStorage.SaveFileAsync(logoFile, "partners");
-                replacementFileName = storedFileName;
+                return uploadError;
             }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = $"Error with file '{logoFile.FileName}': {ex.Message}" });
-            }
+            replacementFileName = storedFileName;
         }
 
         partner.Name = name.Trim();
         partner.Url = url.Trim();
         partner.IsActive = isActive;
+        var oldFileName = partner.LogoFileName;
         if (replacementFileName != null)
         {
-            var oldFileName = partner.LogoFileName;
             partner.LogoFileName = replacementFileName;
             partner.LogoUrl = $"/api/partners/{partner.Id}/logo";
-            if (!string.IsNullOrWhiteSpace(oldFileName))
-            {
-                await _fileStorage.DeleteFileAsync(oldFileName, "partners");
-            }
         }
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch
+        {
+            if (replacementFileName != null) await _fileStorage.DeleteFileAsync(replacementFileName, LogosFolder);
+            throw;
+        }
+
+        if (replacementFileName != null && !string.IsNullOrWhiteSpace(oldFileName))
+        {
+            await _fileStorage.DeleteFileAsync(oldFileName, LogosFolder);
+        }
         return Ok(partner);
     }
 
@@ -227,7 +264,7 @@ public class PartnersController : ControllerBase
             return NotFound();
         }
 
-        var (stream, contentType, _) = await _fileStorage.GetFileAsync(partner.LogoFileName, "partners");
+        var (stream, contentType, _) = await _fileStorage.GetFileAsync(partner.LogoFileName, LogosFolder);
         if (stream == null)
         {
             if (Uri.TryCreate(partner.LogoUrl, UriKind.Absolute, out var externalLogo) &&
@@ -254,7 +291,7 @@ public class PartnersController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(partner.LogoFileName))
         {
-            await _fileStorage.DeleteFileAsync(partner.LogoFileName, "partners");
+            await _fileStorage.DeleteFileAsync(partner.LogoFileName, LogosFolder);
         }
 
         _context.Partners.Remove(partner);

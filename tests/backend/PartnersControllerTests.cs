@@ -112,7 +112,7 @@ public class PartnersControllerTests : IClassFixture<WebApplicationFactory<Progr
     public async Task Admin_CanUploadPartnerLogo_AndRetrieveIt()
     {
         var admin = await CreateAuthenticatedClientAsync("admin@chessweb.local", "Admin123!#");
-        var form = BuildUploadForm("Logo Partner", "https://example.com", [0x1, 0x2, 0x3, 0x4], "logo.png", "image/png");
+        var form = BuildUploadForm("Logo Partner", "https://example.com", ChessWeb.Tests.TestImages.Png(), "logo.png", "image/png");
 
         var uploadResponse = await admin.PostAsync("/api/partners/upload", form);
         Assert.Equal(HttpStatusCode.OK, uploadResponse.StatusCode);

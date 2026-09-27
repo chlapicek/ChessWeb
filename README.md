@@ -27,6 +27,8 @@ docker-compose up --build
 For local development with dummy defaults and hot reload, use `docker-compose.dev.yml` instead.
 Docker Compose stores attachments through `LocalFileStorageService` in the Docker-managed `backend-uploads` named volume, mounted at `/var/lib/chessweb/uploads`. The API streams downloads rather than exposing the volume as a public directory. The volume survives container replacement, but `docker compose down -v` permanently deletes its contents; back it up separately for production data.
 
+Every upload is re-encoded or content-checked and scanned by the `clamav` Compose service before it is stored. The ClamAV container needs roughly 1.5–3 GB of RAM and a few minutes on first start to download its signature database; until it is ready, uploads are refused with 503 rather than accepted unscanned.
+
 ### 2. Run Locally
 
 #### Backend:

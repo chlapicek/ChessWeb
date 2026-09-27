@@ -1,8 +1,11 @@
+using ChessWeb.Services.Uploads;
+
 namespace ChessWeb.Services;
 
 public interface IFileStorageService
 {
-    Task<(string storedFileName, string contentType, long sizeBytes)> SaveFileAsync(IFormFile file, string subFolder);
+    /// <summary>Sanitizes, malware-scans and stores an upload. Throws <see cref="UploadRejectedException"/> or <see cref="UploadUnavailableException"/>.</summary>
+    Task<(string storedFileName, string contentType, long sizeBytes)> SaveFileAsync(IFormFile file, string subFolder, CancellationToken cancellationToken = default);
     Task<(Stream? stream, string contentType, string originalFileName)> GetFileAsync(string storedFileName, string subFolder);
     Task<bool> DeleteFileAsync(string storedFileName, string subFolder);
 }
@@ -11,16 +14,22 @@ public class LocalFileStorageService : IFileStorageService
 {
     private readonly string _baseStoragePath;
     private readonly ILogger<LocalFileStorageService> _logger;
+    private readonly IUploadSanitizer _sanitizer;
+    private readonly IMalwareScanner _scanner;
 
-    public const long MaxFileSizeBytes = FileStorageRules.MaxFileSizeBytes;
-    public static readonly string[] AllowedExtensions = FileStorageRules.AllowedExtensions;
+    public const long MaxFileSizeBytes = UploadSanitizer.MaxFileSizeBytes;
+    public static readonly string[] AllowedExtensions = UploadSanitizer.AllowedExtensions;
 
     public LocalFileStorageService(
         IWebHostEnvironment env,
         ILogger<LocalFileStorageService> logger,
+        IUploadSanitizer sanitizer,
+        IMalwareScanner scanner,
         IConfiguration? configuration = null)
     {
         _logger = logger;
+        _sanitizer = sanitizer;
+        _scanner = scanner;
         var configuredBasePath = configuration?["FileStorage:BasePath"];
         _baseStoragePath = string.IsNullOrWhiteSpace(configuredBasePath)
             ? Path.Combine(env.ContentRootPath, "App_Data", "Uploads")
@@ -31,10 +40,20 @@ public class LocalFileStorageService : IFileStorageService
         }
     }
 
-    public async Task<(string storedFileName, string contentType, long sizeBytes)> SaveFileAsync(IFormFile file, string subFolder)
+    public async Task<(string storedFileName, string contentType, long sizeBytes)> SaveFileAsync(IFormFile file, string subFolder, CancellationToken cancellationToken = default)
     {
-        var ext = FileStorageRules.Validate(file);
         var safeSubFolder = FileStorageRules.ValidateSubFolder(subFolder);
+        var upload = await _sanitizer.SanitizeAsync(file, cancellationToken);
+
+        using (var scanStream = new MemoryStream(upload.Content, writable: false))
+        {
+            var scan = await _scanner.ScanAsync(scanStream, cancellationToken);
+            if (!scan.IsClean)
+            {
+                _logger.LogWarning("[UPLOAD] Rejected {FileName}: malware signature {Signature}", file.FileName.ReplaceLineEndings(" "), scan.Signature);
+                throw new UploadRejectedException("The file was rejected by the virus scanner.");
+            }
+        }
 
         var targetDir = Path.Combine(_baseStoragePath, safeSubFolder);
         if (!Directory.Exists(targetDir))
@@ -42,16 +61,11 @@ public class LocalFileStorageService : IFileStorageService
             Directory.CreateDirectory(targetDir);
         }
 
-        var storedFileName = $"{Guid.NewGuid()}{ext}";
+        var storedFileName = $"{Guid.NewGuid()}{upload.Extension}";
         var filePath = Path.Combine(targetDir, storedFileName);
-        var resolvedContentType = FileStorageRules.ResolveContentType(file.ContentType, ext);
+        await File.WriteAllBytesAsync(filePath, upload.Content, cancellationToken);
 
-        using (var stream = new FileStream(filePath, FileMode.Create))
-        {
-            await file.CopyToAsync(stream);
-        }
-
-        return (storedFileName, resolvedContentType, file.Length);
+        return (storedFileName, upload.ContentType, upload.Content.LongLength);
     }
 
     public Task<(Stream? stream, string contentType, string originalFileName)> GetFileAsync(string storedFileName, string subFolder)
@@ -68,7 +82,7 @@ public class LocalFileStorageService : IFileStorageService
 
         var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
         var ext = Path.GetExtension(storedFileName).ToLowerInvariant();
-        var contentType = FileStorageRules.ResolveContentType(null, ext);
+        var contentType = UploadSanitizer.ContentTypeFor(ext);
 
         return Task.FromResult<(Stream?, string, string)>((stream, contentType, storedFileName));
     }
@@ -130,43 +144,6 @@ public class LocalFileStorageService : IFileStorageService
 
 internal static class FileStorageRules
 {
-    public const long MaxFileSizeBytes = 5 * 1024 * 1024;
-    public static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".pgn", ".txt"];
-
-    public static string Validate(IFormFile file)
-    {
-        if (file == null || file.Length == 0)
-        {
-            throw new ArgumentException("Invalid file provided.");
-        }
-
-        if (file.Length > MaxFileSizeBytes)
-        {
-            throw new InvalidOperationException($"File size exceeds the maximum allowed limit of {MaxFileSizeBytes / (1024 * 1024)} MB.");
-        }
-
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!AllowedExtensions.Contains(extension))
-        {
-            throw new InvalidOperationException($"File type '{extension}' is not permitted. Allowed extensions: {string.Join(", ", AllowedExtensions)}");
-        }
-
-        return extension;
-    }
-
-    public static string ResolveContentType(string? contentType, string extension) =>
-        !string.IsNullOrWhiteSpace(contentType) ? contentType : extension switch
-        {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            ".pdf" => "application/pdf",
-            ".pgn" => "application/x-chess-pgn",
-            ".txt" => "text/plain",
-            _ => "application/octet-stream"
-        };
-
     public static string ValidateSubFolder(string subFolder)
     {
         if (string.IsNullOrWhiteSpace(subFolder) ||

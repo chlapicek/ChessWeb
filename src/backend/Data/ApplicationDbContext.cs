@@ -112,6 +112,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             entity.Property(a => a.FileName).IsRequired().HasMaxLength(255);
             entity.Property(a => a.StoredFileName).IsRequired().HasMaxLength(255);
             entity.Property(a => a.ContentType).IsRequired().HasMaxLength(100);
+            entity.Property(a => a.QuarantineReason).HasMaxLength(300);
 
             entity.HasOne(a => a.Article)
                   .WithMany(art => art.Attachments)

@@ -46,6 +46,12 @@ ChessWeb/
  Attachments use local storage through `FileStorage:Provider=Local`. The application fails fast for unsupported provider values.
  Existing objects from a previous S3 deployment must be copied into the named volume and verified before deploying this local-only configuration; the application does not migrate them automatically.
 
+### Upload Security Pipeline
+- **Sanitizing** (`UploadSanitizer`): images are identified before decoding (content must match the extension, max 25 MP per frame, 100 frames), auto-oriented, downscaled to 2048 px and re-encoded without EXIF/IPTC/XMP/ICC or text metadata; PDFs must start with `%PDF-`; `.txt`/`.pgn` must be valid UTF-8 without NUL bytes. Content types are always set by the server.
+- **Malware scanning** (`ClamAvMalwareScanner`): every upload is streamed to clamd (`ClamAv:*` settings, Compose service `clamav`, signatures refreshed hourly). Uploads fail closed with 503 while the scanner is unavailable. Development runs without a scanner (`ClamAv:Enabled=false`).
+- **Rescanning** (`AttachmentRescanService`): stored article attachments are rescanned every `ClamAv:RescanIntervalHours` (default 24) with the latest signatures; detections are quarantined and never served again. Partner logos are not rescanned, and files uploaded before this pipeline existed are rescanned but not re-encoded.
+- **Rate limiting**: upload endpoints allow `Uploads:RateLimitPerMinute` requests per user (default 20).
+
 ### 3. Interactive Chessboard & PGN Viewer
 - Articles and forum posts can embed PGN or FEN games.
 - Interactive playback controls: First, Previous, Next, Last, Flip board, and move timeline buttons.

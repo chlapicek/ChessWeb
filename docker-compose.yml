@@ -25,11 +25,22 @@ services:
       - FileStorage__BasePath=/var/lib/chessweb/uploads
       - ConnectionStrings__DefaultConnection=Server=db,1433;Database=ChessWebDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD before starting Compose};TrustServerCertificate=True;
       - Jwt__Key=${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY before starting Compose}
+      - ClamAv__Enabled=true
+      - ClamAv__Host=clamav
     volumes:
       - backend-uploads:/var/lib/chessweb/uploads
     depends_on:
       db:
         condition: service_healthy
+      clamav:
+        # Uploads fail closed until the signature database has loaded (can take a few minutes on first start).
+        condition: service_started
+  clamav:
+    image: clamav/clamav:stable
+    environment:
+      - FRESHCLAM_CHECKS=24
+    volumes:
+      - clamav-db:/var/lib/clamav
   db:
     image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
@@ -45,4 +56,5 @@ services:
 
 volumes:
   backend-uploads:
+  clamav-db:
   mssql-data:

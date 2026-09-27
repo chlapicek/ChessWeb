@@ -14,4 +14,9 @@ public class Attachment
 
     public Guid? UploadedByUserId { get; set; }
 
+    // Set when a malware rescan flags the stored file; quarantined files are never served.
+    public DateTime? QuarantinedAt { get; set; }
+    public string? QuarantineReason { get; set; }
+    public DateTime? LastScannedAt { get; set; }
+
 }

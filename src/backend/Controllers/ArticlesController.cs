@@ -4,9 +4,11 @@ using ChessWeb.Domain.Entities;
 using ChessWeb.Domain.Enums;
 using ChessWeb.DTOs;
 using ChessWeb.Services;
+using ChessWeb.Services.Uploads;
 using ChessWeb.Validators;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChessWeb.Controllers;
@@ -103,6 +105,7 @@ public class ArticlesController : ControllerBase
 
     [HttpPost]
     [Authorize] // Registered users can post articles
+    [EnableRateLimiting(UploadRateLimit.PolicyName)]
     public async Task<ActionResult<ArticleDto>> CreateArticle([FromForm] CreateArticleRequest request, [FromForm] List<IFormFile>? attachments)
     {
         var validator = new CreateArticleRequestValidator();
@@ -167,13 +170,15 @@ public class ArticlesController : ControllerBase
             article.Attachments.Add(upload);
         }
 
-        if (attachments != null && attachments.Count > 0)
+        var savedFileNames = new List<string>();
+        try
         {
-            foreach (var file in attachments)
+            foreach (var file in attachments ?? [])
             {
                 try
                 {
-                    var (storedFileName, contentType, sizeBytes) = await _fileStorage.SaveFileAsync(file, AttachmentsFolder);
+                    var (storedFileName, contentType, sizeBytes) = await _fileStorage.SaveFileAsync(file, AttachmentsFolder, HttpContext.RequestAborted);
+                    savedFileNames.Add(storedFileName);
                     article.Attachments.Add(new Attachment
                     {
                         FileName = file.FileName,
@@ -183,19 +188,38 @@ public class ArticlesController : ControllerBase
                         UploadedByUserId = userId
                     });
                 }
-                catch (Exception exception)
+                catch (UploadRejectedException exception)
                 {
-                    _logger.LogError(exception, "Failed to save article attachment {FileName} for user {UserId}", file.FileName, userId);
-                    return BadRequest(new { message = $"Could not upload file '{file.FileName}'." });
+                    await DeleteStoredFilesAsync(savedFileNames);
+                    return BadRequest(new { message = $"Could not upload file '{file.FileName}': {exception.Message}" });
+                }
+                catch (UploadUnavailableException exception)
+                {
+                    _logger.LogError(exception, "Upload pipeline unavailable for user {UserId}", userId);
+                    await DeleteStoredFilesAsync(savedFileNames);
+                    return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = UploadUnavailableException.UserMessage });
                 }
             }
-        }
 
-        _context.Articles.Add(article);
-        await _context.SaveChangesAsync();
+            _context.Articles.Add(article);
+            await _context.SaveChangesAsync();
+        }
+        catch
+        {
+            await DeleteStoredFilesAsync(savedFileNames);
+            throw;
+        }
 
         var created = await LoadArticleDetailAsync(article.Id);
         return CreatedAtAction(nameof(GetArticleById), new { id = article.Id }, await BuildDetailDtoAsync(created!, userId));
+    }
+
+    private async Task DeleteStoredFilesAsync(IEnumerable<string> storedFileNames)
+    {
+        foreach (var storedFileName in storedFileNames)
+        {
+            await _fileStorage.DeleteFileAsync(storedFileName, AttachmentsFolder);
+        }
     }
 
     [HttpPut("{id:guid}")]
@@ -643,6 +667,7 @@ public class ArticlesController : ControllerBase
     }
 
     [HttpPost("attachments")]
+    [EnableRateLimiting(UploadRateLimit.PolicyName)]
     [Authorize] // Inline upload for rich content; linked to an article on create/update
     public async Task<ActionResult<AttachmentDto>> UploadAttachment(IFormFile? file)
     {
@@ -658,7 +683,7 @@ public class ArticlesController : ControllerBase
 
         await RemoveExpiredUploadsAsync();
 
-        var pendingUploads = await _context.Attachments.CountAsync(a => a.ArticleId == null && a.UploadedByUserId == userId);
+        var pendingUploads = await _context.Attachments.CountAsync(a => a.ArticleId == null && a.UploadedByUserId == userId && a.QuarantinedAt == null);
         if (pendingUploads >= MaxPendingUploadsPerUser)
         {
             return BadRequest(new { message = $"You can have at most {MaxPendingUploadsPerUser} unattached uploads. Save your article or wait before uploading more." });
@@ -669,11 +694,16 @@ public class ArticlesController : ControllerBase
         long sizeBytes;
         try
         {
-            (storedFileName, contentType, sizeBytes) = await _fileStorage.SaveFileAsync(file, AttachmentsFolder);
+            (storedFileName, contentType, sizeBytes) = await _fileStorage.SaveFileAsync(file, AttachmentsFolder, HttpContext.RequestAborted);
         }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        catch (UploadRejectedException exception)
         {
             return BadRequest(new { message = exception.Message });
+        }
+        catch (UploadUnavailableException exception)
+        {
+            _logger.LogError(exception, "Upload pipeline unavailable for user {UserId}", userId);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = UploadUnavailableException.UserMessage });
         }
 
         var attachment = new Attachment
@@ -697,7 +727,7 @@ public class ArticlesController : ControllerBase
         var attachment = await _context.Attachments
             .Include(row => row.Article)
             .FirstOrDefaultAsync(row => row.Id == attachmentId);
-        if (attachment == null)
+        if (attachment == null || attachment.QuarantinedAt != null)
         {
             return NotFound();
         }
@@ -743,7 +773,7 @@ public class ArticlesController : ControllerBase
         var referencedIds = result.AttachmentIds.ToList();
         var referenced = await _context.Attachments.Where(a => referencedIds.Contains(a.Id)).ToListAsync();
         var usable = referenced
-            .Where(a => (articleId != null && a.ArticleId == articleId) || (a.ArticleId == null && a.UploadedByUserId == userId))
+            .Where(a => (articleId != null && a.ArticleId == articleId) || (a.ArticleId == null && a.UploadedByUserId == userId && a.QuarantinedAt == null))
             .ToList();
         if (usable.Count != referencedIds.Count)
         {
@@ -861,7 +891,7 @@ public class ArticlesController : ControllerBase
             article.AuthorId,
             GetDisplayName(article.Author, privilegedUserIds.Contains(article.AuthorId), IsAdministrator, "Anonymous"),
             privilegedUserIds.Contains(article.AuthorId) ? article.Author?.ChessRating : null,
-            article.Attachments.Select(MapToAttachmentDto).ToList(),
+            article.Attachments.Where(a => a.QuarantinedAt == null).Select(MapToAttachmentDto).ToList(),
             reactions,
             commentsCount,
             article.CommentsLocked,

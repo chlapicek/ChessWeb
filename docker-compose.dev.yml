@@ -30,11 +30,21 @@ services:
       FileStorage__BasePath: /var/lib/chessweb/uploads
       ConnectionStrings__DefaultConnection: Server=db,1433;Database=ChessWebDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:-ChessWebExample_password1!};TrustServerCertificate=True;
       Jwt__Key: ${JWT_SIGNING_KEY:-development-only-example-jwt-key-1234567890}
+      ClamAv__Enabled: "true"
+      ClamAv__Host: clamav
     volumes:
       - backend-uploads:/var/lib/chessweb/uploads
     depends_on:
       db:
         condition: service_healthy
+      clamav:
+        condition: service_started
+  clamav:
+    image: clamav/clamav:stable
+    environment:
+      FRESHCLAM_CHECKS: "24"
+    volumes:
+      - clamav-db:/var/lib/clamav
   db:
     image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
@@ -52,5 +62,6 @@ services:
 
 volumes:
   backend-uploads:
+  clamav-db:
   frontend-node-modules:
   mssql-data:

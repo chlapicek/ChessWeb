@@ -67,7 +67,7 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
     private static async Task<AttachmentDto> UploadInlineAttachmentAsync(HttpClient client)
     {
         using var form = new MultipartFormDataContent();
-        var file = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47]);
+        var file = new ByteArrayContent(ChessWeb.Tests.TestImages.Png());
         file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         form.Add(file, "file", "diagram.png");
         var response = await client.PostAsync("/api/articles/attachments", form);

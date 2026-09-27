@@ -932,7 +932,7 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
         var adminClient = _factory.CreateClient();
         adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authRes.Token);
 
-        using var fileContent = new ByteArrayContent(new byte[] { 1, 2, 3, 4 });
+        using var fileContent = new ByteArrayContent(ChessWeb.Tests.TestImages.Png());
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
 
         using var form = new MultipartFormDataContent();
