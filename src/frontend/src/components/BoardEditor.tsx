@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Chess } from 'chess.js';
-import { Chessboard, ChessboardDnDProvider, SparePiece } from 'react-chessboard';
+import { Chessboard, ChessboardProvider, SparePiece, type ChessboardOptions } from 'react-chessboard';
 import { ClipboardPaste, Eraser, Pin, RotateCcw, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../context/ThemeContext';
 
 // react-chessboard doesn't export its Square/Piece/BoardPosition types for external casting.
-type BoardPositionProp = ComponentProps<typeof Chessboard>['position'];
-type SparePieceCode = ComponentProps<typeof SparePiece>['piece'];
+type SparePieceCode = ComponentProps<typeof SparePiece>['pieceType'];
 
 const DND_ID = 'board-editor';
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -124,34 +123,18 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
     });
   };
 
-  const onSparePieceDrop = (piece: string, targetSquare: string): boolean => {
-    setPosition((previous) => ({ ...previous, [targetSquare]: piece }));
-    setError(null);
-    return true;
-  };
-
-  const onPieceDrop = (sourceSquare: string, targetSquare: string, piece: string): boolean => {
-    if (sourceSquare === targetSquare) return true;
+  const onPieceDrop: NonNullable<ChessboardOptions['onPieceDrop']> = ({ piece, sourceSquare, targetSquare }) => {
     setPosition((previous) => {
       const next = { ...previous };
-      delete next[sourceSquare];
-      next[targetSquare] = piece;
+      if (!piece.isSparePiece) delete next[sourceSquare];
+      if (targetSquare) next[targetSquare] = piece.pieceType;
       return next;
     });
     setError(null);
     return true;
   };
 
-  const onPieceDropOffBoard = (sourceSquare: string) => {
-    setPosition((previous) => {
-      const next = { ...previous };
-      delete next[sourceSquare];
-      return next;
-    });
-    setError(null);
-  };
-
-  const onSquareClick = (square: string, piece?: string) => {
+  const onSquareClick = ({ square, piece }: { square: string; piece: { pieceType: string } | null }) => {
     // An empty square while a palette piece is armed places it there. Clicking an occupied square
     // always removes the piece on it instead of overwriting — even while armed, so a piece is
     // never silently replaced; the armed piece then stays armed (or "-selected" in sticky mode)
@@ -225,7 +208,19 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
   const whitePalette = useMemo(() => (orientation === 'white' ? WHITE_PALETTE : BLACK_PALETTE), [orientation]);
 
   return (
-    <ChessboardDnDProvider>
+    <ChessboardProvider options={{
+      id: DND_ID,
+      position: Object.fromEntries(Object.entries(position).map(([square, pieceType]) => [square, { pieceType }])),
+      boardOrientation: orientation,
+      boardStyle: { width: boardWidth, borderRadius: '8px' },
+      darkSquareStyle: { backgroundColor: theme === 'dark' ? '#475569' : '#b58863' },
+      lightSquareStyle: { backgroundColor: theme === 'dark' ? '#cbd5e1' : '#f0d9b5' },
+      allowDragging: true,
+      allowDragOffBoard: true,
+      allowDrawingArrows: false,
+      onPieceDrop,
+      onSquareClick,
+    }}>
       <div className="space-y-3">
         <div className="flex gap-1.5">
           <input
@@ -272,29 +267,14 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
                 armedPiece === piece ? 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900' : ''
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
             >
-              <SparePiece piece={piece} width={spareWidth} dndId={DND_ID} />
+              <SparePiece pieceType={piece} />
               {armedPiece === piece && stickyArmed && <Pin className="absolute -top-1 -right-1 h-3 w-3 text-sky-500" />}
             </div>
           ))}
         </div>
 
         <div ref={containerRef} className="w-full flex justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <Chessboard
-            id={DND_ID}
-            position={position as BoardPositionProp}
-            boardWidth={boardWidth}
-            boardOrientation={orientation}
-            arePiecesDraggable={true}
-            areArrowsAllowed={false}
-            dropOffBoardAction="trash"
-            onPieceDrop={onPieceDrop}
-            onSparePieceDrop={onSparePieceDrop}
-            onPieceDropOffBoard={onPieceDropOffBoard}
-            onSquareClick={onSquareClick}
-            customDarkSquareStyle={{ backgroundColor: theme === 'dark' ? '#475569' : '#b58863' }}
-            customLightSquareStyle={{ backgroundColor: theme === 'dark' ? '#cbd5e1' : '#f0d9b5' }}
-            customBoardStyle={{ borderRadius: '8px' }}
-          />
+          <Chessboard />
         </div>
 
         <div className="flex justify-center gap-1">
@@ -318,7 +298,7 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
                 armedPiece === piece ? 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-900' : ''
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
             >
-              <SparePiece piece={piece} width={spareWidth} dndId={DND_ID} />
+              <SparePiece pieceType={piece} />
               {armedPiece === piece && stickyArmed && <Pin className="absolute -top-1 -right-1 h-3 w-3 text-sky-500" />}
             </div>
           ))}
@@ -401,6 +381,6 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
           {t('board.loadPosition')}
         </button>
       </div>
-    </ChessboardDnDProvider>
+    </ChessboardProvider>
   );
 };

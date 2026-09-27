@@ -179,6 +179,17 @@ export interface CalendarEvent {
   createdAt: string;
 }
 
+export interface CalendarFeed {
+  id: string;
+  name: string;
+  url: string;
+  type: number;
+  isActive: boolean;
+  lastSyncTime?: string | null;
+  lastSyncStatus?: string | null;
+  createdAt: string;
+}
+
 export interface Partner {
   id: string;
   name: string;

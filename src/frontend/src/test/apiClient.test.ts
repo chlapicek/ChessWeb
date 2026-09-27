@@ -9,7 +9,9 @@ describe('apiClient', () => {
   it('adds bearer token to authenticated requests', () => {
     localStorage.setItem('chessweb_token', 'my-token');
 
-    const requestInterceptor = apiClient.interceptors.request.handlers[0]?.fulfilled;
+    const requestInterceptor = apiClient.interceptors.request.handlers?.[0]?.fulfilled as unknown as (
+      config: { headers: Record<string, string> }
+    ) => { headers: Record<string, string> };
     const config = { headers: {} } as any;
 
     const updatedConfig = requestInterceptor?.(config);
@@ -21,7 +23,7 @@ describe('apiClient', () => {
     localStorage.setItem('chessweb_token', 'my-token');
     localStorage.setItem('chessweb_user', JSON.stringify({ id: '1' }));
 
-    const errorHandler = apiClient.interceptors.response.handlers[0]?.rejected;
+    const errorHandler = apiClient.interceptors.response.handlers?.[0]?.rejected as (error: unknown) => Promise<unknown>;
     const error = {
       response: { status: 401, data: { message: 'Unauthorized' } },
       config: { url: '/auth/me' },

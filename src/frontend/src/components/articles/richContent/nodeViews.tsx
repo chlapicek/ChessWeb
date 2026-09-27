@@ -104,7 +104,7 @@ export const ChessPositionView: React.FC<NodeViewProps> = ({ node, editor, delet
       <RemoveButton editor={editor} deleteNode={deleteNode} />
       {valid ? (
         <div aria-label={caption ? t('articles.positionDiagramCaption', { caption }) : t('articles.positionDiagram')} role="img">
-          <Chessboard id={boardId} position={fen} arePiecesDraggable={false} boardWidth={220} />
+          <Chessboard options={{ id: boardId, position: fen, allowDragging: false, boardStyle: { width: 220 } }} />
         </div>
       ) : (
         <p className="font-mono text-xs text-rose-600 dark:text-rose-400">{t('articles.invalidPosition')}</p>

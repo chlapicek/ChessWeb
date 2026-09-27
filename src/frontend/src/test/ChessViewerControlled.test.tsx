@@ -11,9 +11,13 @@ const boardMock = vi.hoisted(() => ({ nextDrop: ['g1', 'f3'] as [string, string]
 
 // jsdom cannot drive react-dnd drags, so the board is replaced with a stub that forwards drops.
 vi.mock('react-chessboard', () => ({
-  Chessboard: ({ position, onPieceDrop }: { position: string; onPieceDrop: (from: string, to: string) => boolean }) => (
-    <div data-testid="board" data-position={position}>
-      <button type="button" onClick={() => onPieceDrop(boardMock.nextDrop[0], boardMock.nextDrop[1])}>mock-drop</button>
+  Chessboard: ({ options }: { options: { position: string; onPieceDrop: (args: { piece: { isSparePiece: boolean; pieceType: string; position: string }; sourceSquare: string; targetSquare: string }) => boolean } }) => (
+    <div data-testid="board" data-position={options.position}>
+      <button type="button" onClick={() => options.onPieceDrop({
+        piece: { isSparePiece: false, pieceType: 'wN', position: boardMock.nextDrop[0] },
+        sourceSquare: boardMock.nextDrop[0],
+        targetSquare: boardMock.nextDrop[1],
+      })}>mock-drop</button>
     </div>
   ),
 }));

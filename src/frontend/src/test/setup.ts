@@ -1,4 +1,18 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
+import { vi } from 'vitest';
+import type React from 'react';
+
+vi.mock('react-chessboard', async () => {
+  const { createElement } = await import('react');
+  return {
+    Chessboard: ({ options }: { options?: { position?: string } }) => createElement('div', {
+      'data-testid': 'board',
+      'data-position': options?.position,
+    }),
+    ChessboardProvider: ({ children }: { children: React.ReactNode }) => createElement('div', null, children),
+    SparePiece: ({ pieceType }: { pieceType: string }) => createElement('span', null, pieceType),
+  };
+});
 
 class MockResizeObserver {
   observe() {}
@@ -17,7 +31,6 @@ class MockWorker {
 }
 
 if (!('ResizeObserver' in globalThis)) {
-  // @ts-expect-error jsdom test compatibility
   globalThis.ResizeObserver = MockResizeObserver;
 }
 

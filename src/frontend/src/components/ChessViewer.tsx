@@ -1,14 +1,11 @@
-import React, { useId, useState, useEffect, useMemo, useRef, type ComponentProps } from 'react';
+import React, { useId, useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Chess } from 'chess.js';
-import { Chessboard } from 'react-chessboard';
+import { Chessboard, type ChessboardOptions } from 'react-chessboard';
 import { ChevronLeft, ChevronRight, RotateCcw, FastForward, MessageCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { localizeSan, type PieceLetters } from '../chessNotation';
-
-// react-chessboard doesn't export its Arrow/Square types, so this is derived from the component's own props.
-type BoardArrows = ComponentProps<typeof Chessboard>['customArrows'];
 
 export type ViewerGame = { key: string; pgn: string; label?: string };
 
@@ -429,7 +426,8 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
     return () => document.removeEventListener('keydown', handleDocumentKeyDown);
   }, [currentMoveIndex, handleFirst, handleLast, handleNext, handlePrev, history.length, isAnalyzing, keyboardNavigationEnabled]);
 
-  const onPieceDrop = (sourceSquare: string, targetSquare: string): boolean => {
+  const onPieceDrop: NonNullable<ChessboardOptions['onPieceDrop']> = ({ sourceSquare, targetSquare }) => {
+    if (!targetSquare) return false;
     if (mode === 'analysis') {
       try {
         const board = new Chess(positionFen);
@@ -581,21 +579,18 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
         aria-describedby={`${gameSelectId}-keyboard-hint`}
         className="w-full flex justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
       >
-        <Chessboard
-          id={boardId}
-          position={positionFen}
-          boardWidth={responsiveBoardWidth}
-          boardOrientation={boardOrientation}
-          arePiecesDraggable={true}
-          onPieceDrop={onPieceDrop}
-          // Runtime squares/colors come from live engine output rather than the library's literal Square union.
-          customArrows={(arrows ?? []) as unknown as BoardArrows}
-          customDarkSquareStyle={{ backgroundColor: theme === 'dark' ? '#475569' : '#b58863' }}
-          customLightSquareStyle={{ backgroundColor: theme === 'dark' ? '#cbd5e1' : '#f0d9b5' }}
-          customBoardStyle={{
-            borderRadius: '8px',
-          }}
-        />
+        <Chessboard options={{
+          id: boardId,
+          position: positionFen,
+          boardOrientation,
+          boardStyle: { width: responsiveBoardWidth, borderRadius: '8px' },
+          allowDragging: true,
+          allowDrawingArrows: false,
+          onPieceDrop,
+          arrows: (arrows ?? []).map(([startSquare, endSquare, color]) => ({ startSquare, endSquare, color: color ?? '#2563eb' })),
+          darkSquareStyle: { backgroundColor: theme === 'dark' ? '#475569' : '#b58863' },
+          lightSquareStyle: { backgroundColor: theme === 'dark' ? '#cbd5e1' : '#f0d9b5' },
+        } satisfies ChessboardOptions} />
       </div>
 
       <div className="mt-2.5 min-h-12 w-full text-center">
