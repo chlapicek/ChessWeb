@@ -181,7 +181,7 @@ public class ArticlesController : ControllerBase
                     savedFileNames.Add(storedFileName);
                     article.Attachments.Add(new Attachment
                     {
-                        FileName = file.FileName,
+                        FileName = DisplayFileName(file.FileName, storedFileName),
                         StoredFileName = storedFileName,
                         ContentType = contentType,
                         FileSizeBytes = sizeBytes,
@@ -220,6 +220,15 @@ public class ArticlesController : ControllerBase
         {
             await _fileStorage.DeleteFileAsync(storedFileName, AttachmentsFolder);
         }
+    }
+
+    // The sanitizer may convert formats (GIF -> PNG), so the download name follows the stored file's extension.
+    private static string DisplayFileName(string uploadedFileName, string storedFileName)
+    {
+        var storedExtension = Path.GetExtension(storedFileName);
+        return string.Equals(Path.GetExtension(uploadedFileName), storedExtension, StringComparison.OrdinalIgnoreCase)
+            ? uploadedFileName
+            : Path.ChangeExtension(uploadedFileName, storedExtension);
     }
 
     [HttpPut("{id:guid}")]
@@ -708,7 +717,7 @@ public class ArticlesController : ControllerBase
 
         var attachment = new Attachment
         {
-            FileName = file.FileName,
+            FileName = DisplayFileName(file.FileName, storedFileName),
             StoredFileName = storedFileName,
             ContentType = contentType,
             FileSizeBytes = sizeBytes,

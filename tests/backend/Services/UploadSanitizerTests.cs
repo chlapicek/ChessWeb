@@ -5,7 +5,6 @@ using System.Text;
 using ChessWeb.Services.Uploads;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
 using Xunit;
 
 namespace ChessWeb.Tests.Services;
@@ -18,16 +17,66 @@ public class UploadSanitizerTests
         new(new MemoryStream(bytes), 0, bytes.Length, "file", fileName) { Headers = new HeaderDictionary() };
 
     [Fact]
-    public async Task Image_IsReencodedWithoutExifMetadata()
+    public async Task Jpeg_IsReencodedWithoutExif()
     {
-        var original = TestImages.JpegWithGpsExif();
-
-        var result = await _sanitizer.SanitizeAsync(CreateFile(original, "photo.jpg"));
+        var result = await _sanitizer.SanitizeAsync(CreateFile(TestImages.JpegWithExif(), "photo.jpeg"));
 
         Assert.Equal("image/jpeg", result.ContentType);
-        using var image = Image.Load(result.Content);
-        Assert.Null(image.Metadata.ExifProfile);
+        Assert.Equal(".jpeg", result.Extension);
         Assert.DoesNotContain("Secret Photographer", Encoding.Latin1.GetString(result.Content));
+        Assert.DoesNotContain("Exif", Encoding.Latin1.GetString(result.Content));
+    }
+
+    // Source is 128x64 with a red top-left quadrant; expected size and where the red quadrant ends up.
+    [Theory]
+    [InlineData(2, 128, 64, "TR")]
+    [InlineData(3, 128, 64, "BR")]
+    [InlineData(4, 128, 64, "BL")]
+    [InlineData(5, 64, 128, "TL")]
+    [InlineData(6, 64, 128, "TR")]
+    [InlineData(7, 64, 128, "BR")]
+    [InlineData(8, 64, 128, "BL")]
+    public async Task ExifOrientation_IsApplied(ushort orientation, int width, int height, string redQuadrant)
+    {
+        var result = await _sanitizer.SanitizeAsync(CreateFile(TestImages.JpegWithExif(orientation: orientation), "photo.jpg"));
+
+        using var upright = SkiaSharp.SKBitmap.Decode(result.Content);
+        Assert.Equal((width, height), (upright.Width, upright.Height));
+        foreach (var quadrant in new[] { "TL", "TR", "BL", "BR" })
+        {
+            var x = quadrant[1] == 'L' ? width / 4 : width * 3 / 4;
+            var y = quadrant[0] == 'T' ? height / 4 : height * 3 / 4;
+            var pixel = upright.GetPixel(x, y);
+            var isRed = pixel.Red > 200 && pixel.Blue < 60;
+            Assert.True(isRed == (quadrant == redQuadrant), $"Quadrant {quadrant} red={isRed} for orientation {orientation}");
+        }
+    }
+
+    [Fact]
+    public async Task Webp_IsReencoded()
+    {
+        var result = await _sanitizer.SanitizeAsync(CreateFile(TestImages.Webp(), "board.webp"));
+
+        Assert.Equal("image/webp", result.ContentType);
+        Assert.Equal(4, TestImages.Identify(result.Content).Width);
+    }
+
+    [Fact]
+    public async Task TruncatedImage_IsRejected()
+    {
+        var png = TestImages.Png(64, 64);
+
+        await Assert.ThrowsAsync<UploadRejectedException>(() => _sanitizer.SanitizeAsync(CreateFile(png[..(png.Length / 2)], "cut.png")));
+    }
+
+    [Fact]
+    public async Task Gif_IsStoredAsPng()
+    {
+        var result = await _sanitizer.SanitizeAsync(CreateFile(TestImages.Gif, "animation.gif"));
+
+        Assert.Equal(".png", result.Extension);
+        Assert.Equal("image/png", result.ContentType);
+        Assert.Equal(1, TestImages.Identify(result.Content).Width);
     }
 
     [Fact]
@@ -35,8 +84,7 @@ public class UploadSanitizerTests
     {
         var result = await _sanitizer.SanitizeAsync(CreateFile(TestImages.Png(3000, 100), "wide.png"));
 
-        var info = Image.Identify(result.Content);
-        Assert.Equal(UploadSanitizer.MaxImageDimension, info.Width);
+        Assert.Equal(UploadSanitizer.MaxImageDimension, TestImages.Identify(result.Content).Width);
     }
 
     [Theory]
