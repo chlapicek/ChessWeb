@@ -27,6 +27,7 @@ WORKDIR /usr/share/nginx/html
 
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 # Copy built static files from Vite
 COPY --from=build /app/dist ./

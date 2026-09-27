@@ -48,6 +48,7 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
   const extensions = useMemo(() => createRichExtensions(), []);
   const editor = useEditor({
     extensions,
+    injectCSS: false,
     content: initialDocFor(article),
     editorProps: { attributes: { 'aria-label': t('articles.content'), 'aria-multiline': 'true', role: 'textbox' } },
     onUpdate: ({ editor: current }) => setContentLength(JSON.stringify(sanitizeRichDoc(current.getJSON())).length),

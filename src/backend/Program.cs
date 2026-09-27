@@ -13,6 +13,7 @@ using Serilog.Core;
 using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 
 // Serilog: minimum level is runtime-adjustable via a shared LoggingLevelSwitch (SuperAdmin-controlled, see LoggingController).
 var levelSwitch = new LoggingLevelSwitch(ParseLogEventLevel(builder.Configuration["Logging:LogLevel:Default"]));
@@ -127,15 +128,16 @@ builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton(TimeProvider.System);
 
-// 5. CORS
+// 5. CORS (bearer tokens only, so no credentials are allowed cross-origin). Production is same-origin via nginx.
+var trustedOrigins = new TrustedOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? []);
+builder.Services.AddSingleton(trustedOrigins);
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173", "http://127.0.0.1:3000")
+        policy.WithOrigins(trustedOrigins.Origins.ToArray())
               .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowAnyMethod();
     });
 });
 
@@ -145,7 +147,8 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Global Exception & Request Logging Middleware
+// Security headers first so they also cover error responses; then exception handling & request logging.
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 
@@ -169,6 +172,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowFrontend");
+app.UseMiddleware<CsrfProtectionMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();

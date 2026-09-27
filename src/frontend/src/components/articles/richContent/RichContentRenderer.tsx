@@ -9,7 +9,7 @@ interface RichContentRendererProps {
 
 const RichContentRenderer: React.FC<RichContentRendererProps> = ({ doc }) => {
   const extensions = useMemo(() => createRichExtensions(), []);
-  const editor = useEditor({ extensions, content: doc, editable: false });
+  const editor = useEditor({ extensions, content: doc, editable: false, injectCSS: false });
 
   useEffect(() => {
     if (editor && !editor.isDestroyed) editor.commands.setContent(doc, { emitUpdate: false });
