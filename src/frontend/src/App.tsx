@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { ConfirmProvider } from './components/ConfirmDialog';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { ArticlesView } from './views/ArticlesView';
@@ -61,9 +62,11 @@ export const App: React.FC = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
+        <ConfirmProvider>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </ConfirmProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -4,9 +4,11 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '../services/apiClient';
 import { Team, User } from '../types';
+import { useConfirm } from './ConfirmDialog';
 
 export const TeamManager: React.FC = () => {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [teamName, setTeamName] = useState('');
@@ -66,7 +68,13 @@ export const TeamManager: React.FC = () => {
   };
 
   const deleteTeam = async (team: Team) => {
-    if (!window.confirm(t('admin.teamDeleteConfirm', { name: team.name }))) return;
+    const confirmed = await confirm({
+      title: t('confirmDialog.deleteTeamTitle'),
+      message: t('admin.teamDeleteConfirm', { name: team.name }),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await apiClient.delete(`/teams/${team.id}`);
       toast.success(t('admin.teamDeleted', { name: team.name }));

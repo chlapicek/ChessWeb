@@ -5,14 +5,32 @@ import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { ChevronLeft, ChevronRight, RotateCcw, FastForward, MessageCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { localizeSan } from '../chessNotation';
+import { localizeSan, type PieceLetters } from '../chessNotation';
 
 // react-chessboard doesn't export its Arrow/Square types, so this is derived from the component's own props.
 type BoardArrows = ComponentProps<typeof Chessboard>['customArrows'];
 
+export type ViewerGame = { key: string; pgn: string; label?: string };
+
+export type ViewerTarget = { gameKey: string; ply: number; nonce: number };
+
+export type ChessViewerState = {
+  gameKey: string;
+  ply: number;
+  san?: string;
+  fen: string;
+  moveNumberLabel?: string;
+  isAnalyzing: boolean;
+};
+
 interface ChessViewerProps {
   pgn?: string;
   fen?: string;
+  games?: ViewerGame[];
+  target?: ViewerTarget;
+  onStateChange?: (state: ChessViewerState) => void;
+  mode?: 'edit' | 'analysis';
+  hideGameSelector?: boolean;
   boardWidth?: number;
   arrows?: Array<[string, string, string?]>;
   onPositionChange?: (fen: string) => void;
@@ -30,6 +48,22 @@ interface ParsedGame {
   headers: Record<string, string>;
   annotations: Record<number, string[]>;
 }
+
+type KeyedGame = ParsedGame & { key: string };
+
+const EMPTY_HISTORY: string[] = [];
+
+// Returns "12." for a White move or "12..." for a Black move; ply 1 is the first half-move played.
+export const formatMoveNumber = (ply: number, startFen?: string): string => {
+  const fields = startFen?.trim().split(/\s+/) ?? [];
+  const offset = fields[1] === 'b' ? 1 : 0;
+  const halfMoveIndex = ply - 1 + offset;
+  const moveNumber = (Number(fields[5]) || 1) + Math.floor(halfMoveIndex / 2);
+  return halfMoveIndex % 2 === 0 ? `${moveNumber}.` : `${moveNumber}...`;
+};
+
+export const formatMoveLabel = (ply: number, san: string, pieceLetters?: PieceLetters, startFen?: string): string =>
+  `${formatMoveNumber(ply, startFen)} ${pieceLetters ? localizeSan(san, pieceLetters) : san}`;
 
 const splitPgnGames = (pgn: string): string[] => {
   const games: string[] = [];
@@ -197,7 +231,33 @@ export const parsePgnGames = (pgn: string): ParsedGame[] => {
   });
 };
 
-export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth = 360, arrows, onPositionChange, onPgnChange, notationTarget, keyboardNavigationEnabled = true, reloadToken = 0 }) => {
+const buildViewerGames = (viewerGames: ViewerGame[] | undefined, pgn: string | undefined, fen: string | undefined): KeyedGame[] => {
+  if (viewerGames) {
+    return viewerGames.flatMap(({ key, pgn: gamePgn, label }) => {
+      const [parsed] = parsePgnGames(gamePgn);
+      return parsed ? [{ ...parsed, key, label: label ?? parsed.label }] : [];
+    });
+  }
+  if (fen) return [{ key: 'fen', pgn: '', history: [], startFen: fen, headers: {}, annotations: {} }];
+  return parsePgnGames(pgn ?? '').map((game, index) => ({ ...game, key: `p${index}` }));
+};
+
+export const ChessViewer: React.FC<ChessViewerProps> = ({
+  pgn,
+  fen,
+  games: viewerGames,
+  target,
+  onStateChange,
+  mode = 'edit',
+  hideGameSelector = false,
+  boardWidth = 360,
+  arrows,
+  onPositionChange,
+  onPgnChange,
+  notationTarget,
+  keyboardNavigationEnabled = true,
+  reloadToken = 0,
+}) => {
   const { theme } = useTheme();
   const { t, i18n } = useTranslation();
   const pieceLetters = useMemo(
@@ -205,17 +265,28 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
     [i18n.language, t],
   );
   const gameSelectId = useId();
-  const [game, setGame] = useState<Chess>(new Chess());
-  const [history, setHistory] = useState<string[]>([]);
+  // react-chessboard needs a unique id per mounted board for drag and drop to target the right one.
+  const boardId = `chessviewer-${gameSelectId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const viewerGamesSignature = viewerGames ? JSON.stringify(viewerGames.map(({ key, pgn: gamePgn, label }) => [key, gamePgn, label ?? null])) : null;
+  const sourceSignature = JSON.stringify([viewerGamesSignature, pgn ?? null, fen ?? null, reloadToken]);
+  const [games, setGames] = useState<KeyedGame[]>(() => buildViewerGames(viewerGames, pgn, fen));
+  const [activeGame, setActiveGame] = useState(0);
   const [currentMoveIndex, setCurrentMoveIndex] = useState<number>(-1);
   const [boardOrientation, setBoardOrientation] = useState<'white' | 'black'>('white');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [customMoves, setCustomMoves] = useState<string[]>([]);
-  const [games, setGames] = useState<ParsedGame[]>(() => fen ? [{ pgn: '', history: [], startFen: fen, headers: {}, annotations: {} }] : parsePgnGames(pgn ?? ''));
-  const [activeGame, setActiveGame] = useState(0);
   const skipReset = useRef(false);
+  const pendingPly = useRef<number | null>(null);
+  const loadedSource = useRef(sourceSignature);
+  const awaitingGames = useRef(false);
+  const appliedTargetNonce = useRef<number | null>(null);
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
   const boardContainerRef = useRef<HTMLDivElement>(null);
   const [responsiveBoardWidth, setResponsiveBoardWidth] = useState(boardWidth);
+
+  const selectedGame = games[activeGame];
+  const history = selectedGame?.history ?? EMPTY_HISTORY;
 
   useEffect(() => {
     const container = boardContainerRef.current;
@@ -234,41 +305,80 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
   }, [boardWidth]);
 
   useEffect(() => {
-    setGames(fen ? [{ pgn: '', history: [], startFen: fen, headers: {}, annotations: {} }] : parsePgnGames(pgn ?? ''));
-    setActiveGame(0);
-  }, [pgn, fen, reloadToken]);
+    if (loadedSource.current === sourceSignature) return;
+    loadedSource.current = sourceSignature;
+    awaitingGames.current = true;
+    const nextGames = buildViewerGames(viewerGames, pgn, fen);
+    const activeKey = games[activeGame]?.key;
+    setGames(nextGames);
+    setActiveGame(viewerGames ? Math.max(0, nextGames.findIndex((item) => item.key === activeKey)) : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceSignature]);
 
   useEffect(() => {
+    awaitingGames.current = false;
     if (skipReset.current) { skipReset.current = false; return; }
-    const selected = games[activeGame];
-    const start = new Chess();
-    if (selected?.startFen) start.load(selected.startFen);
-    setHistory(selected?.history ?? []);
-    setGame(start);
-    setCurrentMoveIndex(-1);
+    const ply = pendingPly.current;
+    pendingPly.current = null;
+    const length = games[activeGame]?.history.length ?? 0;
+    setCurrentMoveIndex(ply === null ? -1 : Math.min(Math.max(ply, 0), length) - 1);
     setIsAnalyzing(false);
     setCustomMoves([]);
   }, [games, activeGame]);
 
-  useEffect(() => {
-    onPositionChange?.(game.fen());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game]);
-
   const goToMove = (index: number) => {
     setIsAnalyzing(false);
     setCustomMoves([]);
-    const replayGame = new Chess();
-    const selected = games[activeGame];
-    if (selected?.startFen) replayGame.load(selected.startFen);
-    for (let i = 0; i <= index; i++) {
-      if (history[i]) {
-        replayGame.move(history[i]);
-      }
-    }
-    setGame(replayGame);
-    setCurrentMoveIndex(index);
+    setCurrentMoveIndex(Math.max(-1, Math.min(index, history.length - 1)));
   };
+
+  useEffect(() => {
+    if (!target || awaitingGames.current || appliedTargetNonce.current === target.nonce) return;
+    const index = games.findIndex((item) => item.key === target.gameKey);
+    if (index < 0) return;
+    appliedTargetNonce.current = target.nonce;
+    if (index === activeGame) {
+      goToMove(Math.max(0, target.ply) - 1);
+    } else {
+      pendingPly.current = target.ply;
+      setActiveGame(index);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.nonce, target?.gameKey, target?.ply, games, activeGame]);
+
+  const position = useMemo(() => {
+    const board = new Chess();
+    try {
+      if (selectedGame?.startFen) board.load(selectedGame.startFen);
+      const moves = [...history.slice(0, currentMoveIndex + 1), ...(isAnalyzing ? customMoves : [])];
+      for (const move of moves) board.move(move);
+    } catch {
+      // Invalid FEN or move: show the last valid position.
+    }
+    return board;
+  }, [selectedGame, history, currentMoveIndex, isAnalyzing, customMoves]);
+  const positionFen = position.fen();
+
+  useEffect(() => {
+    onPositionChange?.(positionFen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positionFen]);
+
+  const activeKey = selectedGame?.key;
+  const currentSan = currentMoveIndex >= 0 ? history[currentMoveIndex] : undefined;
+  useEffect(() => {
+    if (!activeKey) return;
+    const ply = currentMoveIndex + 1;
+    onStateChangeRef.current?.({
+      gameKey: activeKey,
+      ply,
+      san: currentSan,
+      fen: positionFen,
+      moveNumberLabel: ply > 0 ? formatMoveNumber(ply, selectedGame?.startFen) : undefined,
+      isAnalyzing,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey, currentMoveIndex, currentSan, positionFen, isAnalyzing]);
 
   const handleFirst = () => goToMove(-1);
   const handlePrev = () => {
@@ -320,6 +430,18 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
   }, [currentMoveIndex, handleFirst, handleLast, handleNext, handlePrev, history.length, isAnalyzing, keyboardNavigationEnabled]);
 
   const onPieceDrop = (sourceSquare: string, targetSquare: string): boolean => {
+    if (mode === 'analysis') {
+      try {
+        const board = new Chess(positionFen);
+        const move = board.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
+        if (!move) return false;
+        setCustomMoves((moves) => [...(isAnalyzing ? moves : []), move.san]);
+        setIsAnalyzing(true);
+        return true;
+      } catch {
+        return false;
+      }
+    }
     try {
       const selected = games[activeGame];
       const gameCopy = new Chess();
@@ -349,8 +471,6 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
         : item);
       skipReset.current = true;
       setGames(updatedGames);
-      setHistory(updatedHistory);
-      setGame(gameCopy);
       setCurrentMoveIndex(updatedHistory.length - 1);
       setIsAnalyzing(false);
       setCustomMoves([]);
@@ -367,20 +487,29 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
 
   const selectedAnnotations = games[activeGame]?.annotations ?? {};
   const annotationCount = Object.values(selectedAnnotations).reduce((count, notes) => count + notes.length, 0);
-  const navigation = (
-    <div role="toolbar" aria-label={t('chessboard.moveNavigation')} className="hidden flex-nowrap items-center justify-center gap-1.5 sm:gap-2 mt-3 lg:flex">
-      <button type="button" onClick={handleFirst} aria-label={t('chessboard.startPosition')} disabled={currentMoveIndex === -1 && !isAnalyzing} className="p-2 rounded-lg border border-slate-300 bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800" title={t('chessboard.startPosition')}><RotateCcw className="w-4 h-4" /></button>
-      <button type="button" onClick={handlePrev} aria-label={t('chessboard.prevMove')} disabled={currentMoveIndex === -1 && !isAnalyzing} className="p-2 rounded-lg border border-slate-300 bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800" title={t('chessboard.prevMove')}><ChevronLeft className="w-4 h-4" /></button>
-      <span className="whitespace-nowrap px-2 text-xs font-mono">{currentMoveIndex + 1} / {history.length}</span>
-      <button type="button" onClick={handleNext} aria-label={t('chessboard.nextMove')} disabled={currentMoveIndex === history.length - 1 && !isAnalyzing} className="p-2 rounded-lg border border-slate-300 bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800" title={t('chessboard.nextMove')}><ChevronRight className="w-4 h-4" /></button>
-      <button type="button" onClick={handleLast} aria-label={t('chessboard.endGame')} disabled={currentMoveIndex === history.length - 1 && !isAnalyzing} className="p-2 rounded-lg border border-slate-300 bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800" title={t('chessboard.endGame')}><FastForward className="w-4 h-4" /></button>
-    </div>
-  );
+  const inlineNotation = !notationTarget;
+  const atStart = currentMoveIndex === -1 && !isAnalyzing;
+  const atEnd = currentMoveIndex === history.length - 1 && !isAnalyzing;
+  const renderNavigation = (variant: 'compact' | 'touch', visibilityClass: string) => {
+    const buttonClass = variant === 'touch'
+      ? 'flex h-11 min-w-11 items-center justify-center rounded-lg border border-slate-300 disabled:opacity-40 dark:border-slate-700'
+      : 'p-2 rounded-lg border border-slate-300 bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800';
+    const chevronClass = variant === 'touch' ? 'w-5 h-5' : 'w-4 h-4';
+    return (
+      <div role="toolbar" aria-label={t('chessboard.moveNavigation')} className={`${visibilityClass} mt-3 w-full flex-nowrap items-center justify-center gap-1.5 sm:gap-2`}>
+        <button type="button" onClick={handleFirst} aria-label={t('chessboard.startPosition')} disabled={atStart} className={buttonClass} title={t('chessboard.startPosition')}><RotateCcw className="w-4 h-4" /></button>
+        <button type="button" onClick={handlePrev} aria-label={t('chessboard.prevMove')} disabled={atStart} className={buttonClass} title={t('chessboard.prevMove')}><ChevronLeft className={chevronClass} /></button>
+        <span className="min-w-16 whitespace-nowrap px-2 text-center text-xs font-mono">{currentMoveIndex + 1} / {history.length}</span>
+        <button type="button" onClick={handleNext} aria-label={t('chessboard.nextMove')} disabled={atEnd} className={buttonClass} title={t('chessboard.nextMove')}><ChevronRight className={chevronClass} /></button>
+        <button type="button" onClick={handleLast} aria-label={t('chessboard.endGame')} disabled={atEnd} className={buttonClass} title={t('chessboard.endGame')}><FastForward className="w-4 h-4" /></button>
+      </div>
+    );
+  };
 
   const notation = (
     <>
       {annotationCount > 0 && <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"><MessageCircle className="h-3.5 w-3.5" />{t('chessboard.annotationsHeading')} ({annotationCount})</div>}
-      {games.length > 1 && <div className="mt-3 flex items-center justify-between gap-3 text-xs"><label htmlFor={`${gameSelectId}-game`}>{t('chessboard.game')}</label><select id={`${gameSelectId}-game`} value={activeGame} onChange={(event) => setActiveGame(Number(event.target.value))} aria-label={t('chessboard.selectGame')} className="max-w-[75%] rounded-lg border px-2 py-1.5 dark:bg-slate-800">{games.map((item, index) => <option key={index} value={index}>{t('chessboard.gameOption', { number: index + 1, label: item.label || t('chessboard.game') })}</option>)}</select></div>}
+      {games.length > 1 && !hideGameSelector && <div className="mt-3 flex items-center justify-between gap-3 text-xs"><label htmlFor={`${gameSelectId}-game`}>{t('chessboard.game')}</label><select id={`${gameSelectId}-game`} value={activeGame} onChange={(event) => setActiveGame(Number(event.target.value))} aria-label={t('chessboard.selectGame')} className="max-w-[75%] rounded-lg border px-2 py-1.5 dark:bg-slate-800">{games.map((item, index) => <option key={item.key} value={index}>{t('chessboard.gameOption', { number: index + 1, label: item.label || t('chessboard.game') })}</option>)}</select></div>}
       {history.length > 0 && <div className="mt-3 max-h-56 min-h-20 overflow-y-auto rounded-xl border bg-slate-50 p-2 text-xs dark:bg-slate-950">
         {currentMoveIndex === -1 && !isAnalyzing && <div className="mb-1 rounded border-l-2 border-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-sans text-emerald-700 dark:text-emerald-300">{t('chessboard.initialPosition')}</div>}
         <div className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1">
@@ -407,12 +536,18 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
           })}
         </div>
       </div>}
-      <div className="hidden justify-center gap-2 mt-2 lg:flex"><button type="button" onClick={() => setBoardOrientation((orientation) => orientation === 'white' ? 'black' : 'white')} className="whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs">{t('chessboard.flip')} ({t(boardOrientation === 'white' ? 'board.orientationWhite' : 'board.orientationBlack')})</button></div>
+      <div className={`${inlineNotation ? 'flex' : 'hidden lg:flex'} justify-center gap-2 mt-2`}><button type="button" onClick={() => setBoardOrientation((orientation) => orientation === 'white' ? 'black' : 'white')} className="whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs">{t('chessboard.flip')} ({t(boardOrientation === 'white' ? 'board.orientationWhite' : 'board.orientationBlack')})</button></div>
     </>
   );
 
+  const customMovesText = customMoves.map((san, index) => {
+    const ply = currentMoveIndex + 2 + index;
+    const label = formatMoveLabel(ply, san, pieceLetters, selectedGame?.startFen);
+    return index === 0 || !label.includes('...') ? label : localizeSan(san, pieceLetters);
+  }).join(' ');
+
   return (
-    <div className="flex w-full flex-col items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-md dark:shadow-lg max-w-full transition-colors">
+    <div className="flex w-full min-w-0 flex-col items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-md dark:shadow-lg max-w-full transition-colors">
       {/* Interactive status banner */}
       <div className="w-full flex items-center justify-between mb-3 text-xs">
         {isAnalyzing ? (
@@ -447,7 +582,8 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
         className="w-full flex justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
       >
         <Chessboard
-          position={game.fen()}
+          id={boardId}
+          position={positionFen}
           boardWidth={responsiveBoardWidth}
           boardOrientation={boardOrientation}
           arePiecesDraggable={true}
@@ -467,31 +603,19 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({ pgn, fen, boardWidth =
         <p id={`${gameSelectId}-keyboard-hint`} className="sr-only">{t('chessboard.keyboardNavigationHint')}</p>
       </div>
 
-      {!notationTarget && games.length > 1 && (
-        <div className="mt-3 flex w-full items-center justify-between gap-3 text-xs">
-          <label htmlFor={`${gameSelectId}-game`}>{t('chessboard.game')}</label>
-          <select id={`${gameSelectId}-game`} value={activeGame} onChange={(event) => setActiveGame(Number(event.target.value))} aria-label={t('chessboard.selectGame')} className="max-w-[75%] rounded-lg border px-2 py-1.5 dark:bg-slate-800">
-            {games.map((item, index) => <option key={index} value={index}>{t('chessboard.gameOption', { number: index + 1, label: item.label || t('chessboard.game') })}</option>)}
-          </select>
-        </div>
-      )}
-
-      <div className="mt-3 flex w-full items-center justify-center gap-2 lg:hidden" role="toolbar" aria-label={t('chessboard.moveNavigation')}>
-        <button type="button" onClick={handleFirst} aria-label={t('chessboard.startPosition')} disabled={currentMoveIndex === -1 && !isAnalyzing} className="flex h-11 min-w-11 items-center justify-center rounded-lg border disabled:opacity-40" title={t('chessboard.startPosition')}><RotateCcw className="w-4 h-4" /></button>
-        <button type="button" onClick={handlePrev} aria-label={t('chessboard.prevMove')} disabled={currentMoveIndex === -1 && !isAnalyzing} className="flex h-11 min-w-11 items-center justify-center rounded-lg border disabled:opacity-40" title={t('chessboard.prevMove')}><ChevronLeft className="w-5 h-5" /></button>
-        <span className="min-w-16 whitespace-nowrap text-center text-xs font-mono">{currentMoveIndex + 1} / {history.length}</span>
-        <button type="button" onClick={handleNext} aria-label={t('chessboard.nextMove')} disabled={currentMoveIndex === history.length - 1 && !isAnalyzing} className="flex h-11 min-w-11 items-center justify-center rounded-lg border disabled:opacity-40" title={t('chessboard.nextMove')}><ChevronRight className="w-5 h-5" /></button>
-        <button type="button" onClick={handleLast} aria-label={t('chessboard.endGame')} disabled={currentMoveIndex === history.length - 1 && !isAnalyzing} className="flex h-11 min-w-11 items-center justify-center rounded-lg border disabled:opacity-40" title={t('chessboard.endGame')}><FastForward className="w-4 h-4" /></button>
-      </div>
+      {inlineNotation && renderNavigation('touch', 'flex')}
+      {!inlineNotation && renderNavigation('touch', 'flex lg:hidden')}
 
       {/* Custom analysis moves */}
       {isAnalyzing && customMoves.length > 0 && (
         <div className="w-full mt-3 p-2.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-emerald-500/30 text-xs font-mono">
           <span className="text-emerald-600 dark:text-emerald-400 font-semibold block mb-1">{t('chessboard.yourMoves')}</span>
-          <span className="text-slate-800 dark:text-slate-200">{customMoves.join(' ')}</span>
+          <span className="text-slate-800 dark:text-slate-200">{customMovesText}</span>
         </div>
       )}
-      {notationTarget && createPortal(<div>{notation}{navigation}</div>, notationTarget)}
+      {inlineNotation
+        ? <div className="w-full">{notation}</div>
+        : createPortal(<div>{notation}{renderNavigation('compact', 'hidden lg:flex')}</div>, notationTarget)}
     </div>
   );
 };

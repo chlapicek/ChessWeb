@@ -13,6 +13,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Article> Articles => Set<Article>();
     public DbSet<ArticleComment> ArticleComments => Set<ArticleComment>();
     public DbSet<ArticleReaction> ArticleReactions => Set<ArticleReaction>();
+    public DbSet<ArticleCommentReaction> ArticleCommentReactions => Set<ArticleCommentReaction>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
     public DbSet<CalendarFeed> CalendarFeeds => Set<CalendarFeed>();
@@ -46,6 +47,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
                   .WithMany(u => u.Articles)
                   .HasForeignKey(a => a.AuthorId)
                   .OnDelete(DeleteBehavior.Cascade);
+
+            // No DB cascade to avoid SQL Server multiple cascade paths; GameCollectionsController nulls links before delete.
+            entity.HasOne(a => a.GameCollection)
+                  .WithMany()
+                  .HasForeignKey(a => a.GameCollectionId)
+                  .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         // ArticleComment configuration
@@ -80,6 +87,22 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
                   .WithMany(u => u.ArticleReactions)
                   .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ArticleCommentReaction>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.HasIndex(r => new { r.CommentId, r.UserId, r.ReactionType }).IsUnique();
+
+            entity.HasOne(r => r.Comment)
+                  .WithMany(c => c.Reactions)
+                  .HasForeignKey(r => r.CommentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.User)
+                  .WithMany()
+                  .HasForeignKey(r => r.UserId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Attachment configuration

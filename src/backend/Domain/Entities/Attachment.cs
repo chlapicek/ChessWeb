@@ -12,4 +12,6 @@ public class Attachment
     public Guid? ArticleId { get; set; }
     public Article? Article { get; set; }
 
+    public Guid? UploadedByUserId { get; set; }
+
 }

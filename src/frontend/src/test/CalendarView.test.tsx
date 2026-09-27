@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '../context/ThemeContext';
 import { AuthProvider } from '../context/AuthContext';
 import { CalendarView } from '../views/CalendarView';
+import { ConfirmProvider } from '../components/ConfirmDialog';
 import '../i18n';
 import i18n from '../i18n';
 
@@ -90,9 +91,11 @@ const renderCalendarView = (props: { subscribedOnly?: boolean } = {}) =>
   render(
     <ThemeProvider>
       <AuthProvider>
-        <MemoryRouter>
-          <CalendarView {...props} />
-        </MemoryRouter>
+        <ConfirmProvider>
+          <MemoryRouter>
+            <CalendarView {...props} />
+          </MemoryRouter>
+        </ConfirmProvider>
       </AuthProvider>
     </ThemeProvider>
   );

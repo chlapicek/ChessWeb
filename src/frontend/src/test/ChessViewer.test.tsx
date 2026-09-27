@@ -159,6 +159,18 @@ describe('ChessViewer PGN support', () => {
 		link.remove();
 	});
 
+	it('renders the move list, flip button and a single navigation toolbar inline without a notation target', () => {
+		render(<ThemeProvider><ChessViewer pgn={multiGamePgn} /></ThemeProvider>);
+
+		expect(screen.getByRole('button', { name: '1. e4' })).toBeInTheDocument();
+		expect(screen.getAllByRole('toolbar', { name: i18n.t('chessboard.moveNavigation') })).toHaveLength(1);
+		expect(screen.getAllByRole('combobox', { name: i18n.t('chessboard.selectGame') })).toHaveLength(1);
+		expect(screen.getByRole('button', { name: new RegExp(i18n.t('chessboard.flip')) })).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.nextMove') }));
+		expect(screen.getByRole('button', { name: '1. e4' })).toHaveAttribute('aria-current', 'step');
+	});
+
 	it('highlights the currently selected move', () => {
 		const target = document.createElement('div');
 		document.body.appendChild(target);

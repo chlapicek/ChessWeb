@@ -10,6 +10,7 @@ import { BoardView } from '../views/BoardView';
 import { PlayersView } from '../views/PlayersView';
 import { SettingsView } from '../views/SettingsView';
 import { AdminView } from '../views/AdminView';
+import { ConfirmProvider } from '../components/ConfirmDialog';
 import '../i18n';
 import i18n from '../i18n';
 
@@ -68,7 +69,9 @@ const renderWithProviders = (ui: React.ReactElement) =>
   render(
     <ThemeProvider>
       <AuthProvider>
-        <MemoryRouter>{ui}</MemoryRouter>
+        <ConfirmProvider>
+          <MemoryRouter>{ui}</MemoryRouter>
+        </ConfirmProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -38,8 +38,8 @@ ChessWeb/
 - **Administrators**: Full system rights, ability to delete any post/article, change user roles, manage external iCal/RSS calendar sync feeds.
 
 ### 2. Length & Attachment Size Quotas
-- **Articles**: Max 30,000 characters. Up to 3 attachments per article (max 5 MB per file: JPG, PNG, GIF, WebP, PDF, PGN, or TXT).
-- **Forum Topics / Posts**: Max 15,000 / 10,000 characters. Up to 3 attachments (max 5 MB per file).
+- **Articles**: Rich-text (TipTap JSON, max 50,000 characters; legacy plain text max 30,000). Up to 10 attachments per article (max 5 MB per file: JPG, PNG, GIF, WebP, PDF, PGN, or TXT). Images, files, positions, games and move references can be embedded inline; the server validates the document against an allowlist.
+- **Comments**: Max 5,000 characters, paginated, editable by their author, with reactions. The article author or an administrator can lock comments; when locked only they can still comment.
 - **Enforcement**: Validated on both client side and backend (`FluentValidation` + the configured file-storage service).
 
 ### Attachment Storage

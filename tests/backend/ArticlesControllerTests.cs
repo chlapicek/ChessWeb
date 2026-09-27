@@ -43,7 +43,7 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
         return (anonymousFactoryClient, auth.User);
     }
 
-    private static MultipartFormDataContent BuildCreateArticleForm(string title, string content, string? summary = null, string? pgnData = null, string? fenData = null)
+    private static MultipartFormDataContent BuildCreateArticleForm(string title, string content, string? summary = null, string? pgnData = null, string? fenData = null, ArticleContentFormat? contentFormat = null, Guid? gameCollectionId = null)
     {
         var form = new MultipartFormDataContent
         {
@@ -53,7 +53,28 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
         if (summary != null) form.Add(new StringContent(summary), "Summary");
         if (pgnData != null) form.Add(new StringContent(pgnData), "PgnData");
         if (fenData != null) form.Add(new StringContent(fenData), "FenData");
+        if (contentFormat != null) form.Add(new StringContent(((int)contentFormat.Value).ToString()), "ContentFormat");
+        if (gameCollectionId != null) form.Add(new StringContent(gameCollectionId.Value.ToString()), "GameCollectionId");
         return form;
+    }
+
+    private static string RichDoc(params string[] blocks) => $$"""{"type":"doc","content":[{{string.Join(",", blocks)}}]}""";
+
+    private static string Paragraph(string text) => $$"""{"type":"paragraph","content":[{"type":"text","text":"{{text}}"}]}""";
+
+    private static string ImageNode(Guid attachmentId) => $$$"""{"type":"attachmentImage","attrs":{"attachmentId":"{{{attachmentId}}}","alt":"diagram"}}""";
+
+    private static async Task<AttachmentDto> UploadInlineAttachmentAsync(HttpClient client)
+    {
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47]);
+        file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(file, "file", "diagram.png");
+        var response = await client.PostAsync("/api/articles/attachments", form);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var dto = await response.Content.ReadFromJsonAsync<AttachmentDto>();
+        Assert.NotNull(dto);
+        return dto!;
     }
 
     private static async Task<ArticleDto> CreateArticleAsync(HttpClient client, string title = "My Article", string content = "Some content about chess.")
@@ -117,7 +138,9 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
         Assert.NotNull(article);
         Assert.Equal(authorNickname, article!.AuthorName);
         Assert.Null(article.AuthorRating);
-        var comment = Assert.Single(article.Comments);
+        Assert.Equal(1, article.CommentsCount);
+        var comments = await _factory.CreateClient().GetFromJsonAsync<PagedResult<ArticleCommentDto>>($"/api/articles/{created.Id}/comments");
+        var comment = Assert.Single(comments!.Items);
         Assert.Equal(commenterNickname, comment.AuthorName);
         Assert.Null(comment.AuthorRating);
     }
@@ -454,5 +477,220 @@ public class ArticlesControllerTests : IClassFixture<WebApplicationFactory<Progr
             new ToggleReactionRequest((ChessWeb.Domain.Entities.ArticleReactionType)999));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetComments_ReturnsPagedCommentsInCreationOrder_AndHidesUnpublishedArticles()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var created = await CreateArticleAsync(author);
+        for (var i = 1; i <= 3; i++)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await author.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest($"Comment {i}"))).StatusCode);
+        }
+
+        var anonymous = _factory.CreateClient();
+        var firstPage = await anonymous.GetFromJsonAsync<PagedResult<ArticleCommentDto>>($"/api/articles/{created.Id}/comments?page=1&pageSize=2");
+        Assert.NotNull(firstPage);
+        Assert.Equal(3, firstPage!.TotalCount);
+        Assert.Equal(2, firstPage.TotalPages);
+        Assert.Equal(new[] { "Comment 1", "Comment 2" }, firstPage.Items.Select(c => c.Content));
+        Assert.All(firstPage.Items, c => Assert.False(c.CanEdit || c.CanDelete));
+
+        var secondPage = await author.GetFromJsonAsync<PagedResult<ArticleCommentDto>>($"/api/articles/{created.Id}/comments?page=2&pageSize=2");
+        var last = Assert.Single(secondPage!.Items);
+        Assert.Equal("Comment 3", last.Content);
+        Assert.True(last.CanEdit);
+        Assert.True(last.CanDelete);
+
+        var clamped = await anonymous.GetFromJsonAsync<PagedResult<ArticleCommentDto>>($"/api/articles/{created.Id}/comments?pageSize=500");
+        Assert.Equal(50, clamped!.PageSize);
+
+        var detail = await anonymous.GetFromJsonAsync<ArticleDto>($"/api/articles/{created.Id}");
+        Assert.Equal(3, detail!.CommentsCount);
+
+        await author.PutAsJsonAsync($"/api/articles/{created.Id}", new UpdateArticleRequest(created.Title, created.Content, null, null, null, false));
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/articles/{created.Id}/comments")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await author.GetAsync($"/api/articles/{created.Id}/comments")).StatusCode);
+        await author.DeleteAsync($"/api/articles/{created.Id}");
+    }
+
+    [Fact]
+    public async Task UpdateComment_OnlyCommentAuthorCanEdit()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var created = await CreateArticleAsync(author);
+        var (commenter, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var comment = await (await commenter.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Original"))).Content.ReadFromJsonAsync<ArticleCommentDto>();
+        Assert.NotNull(comment);
+        Assert.Null(comment!.UpdatedAt);
+
+        var edit = await commenter.PutAsJsonAsync($"/api/articles/comments/{comment.Id}", new CreateCommentRequest("Edited"));
+        Assert.Equal(HttpStatusCode.OK, edit.StatusCode);
+        var edited = await edit.Content.ReadFromJsonAsync<ArticleCommentDto>();
+        Assert.Equal("Edited", edited!.Content);
+        Assert.NotNull(edited.UpdatedAt);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await commenter.PutAsJsonAsync($"/api/articles/comments/{comment.Id}", new CreateCommentRequest(new string('x', 5001)))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await author.PutAsJsonAsync($"/api/articles/comments/{comment.Id}", new CreateCommentRequest("Article author edit"))).StatusCode);
+        var admin = await CreateAuthenticatedClientAsync("admin@chessweb.local", "Admin123!#");
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PutAsJsonAsync($"/api/articles/comments/{comment.Id}", new CreateCommentRequest("Admin edit"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await commenter.PutAsJsonAsync($"/api/articles/comments/{Guid.NewGuid()}", new CreateCommentRequest("Missing"))).StatusCode);
+
+        var adminView = await admin.GetFromJsonAsync<PagedResult<ArticleCommentDto>>($"/api/articles/{created.Id}/comments");
+        var adminComment = Assert.Single(adminView!.Items);
+        Assert.False(adminComment.CanEdit);
+        Assert.True(adminComment.CanDelete);
+    }
+
+    [Fact]
+    public async Task ToggleCommentReaction_AddsThenRemovesReaction()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var created = await CreateArticleAsync(author);
+        var comment = await (await author.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("React to me"))).Content.ReadFromJsonAsync<ArticleCommentDto>();
+        var (reactor, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+
+        var added = await (await reactor.PostAsJsonAsync($"/api/articles/comments/{comment!.Id}/reactions", new ToggleReactionRequest(ArticleReactionType.Heart))).Content.ReadFromJsonAsync<List<ReactionSummaryDto>>();
+        var heart = Assert.Single(added!, r => r.ReactionType == ArticleReactionType.Heart);
+        Assert.Equal(1, heart.Count);
+        Assert.True(heart.UserReacted);
+
+        var listed = await reactor.GetFromJsonAsync<PagedResult<ArticleCommentDto>>($"/api/articles/{created.Id}/comments");
+        Assert.True(Assert.Single(listed!.Items).Reactions.Single(r => r.ReactionType == ArticleReactionType.Heart).UserReacted);
+
+        var removed = await (await reactor.PostAsJsonAsync($"/api/articles/comments/{comment.Id}/reactions", new ToggleReactionRequest(ArticleReactionType.Heart))).Content.ReadFromJsonAsync<List<ReactionSummaryDto>>();
+        var heartAfter = Assert.Single(removed!, r => r.ReactionType == ArticleReactionType.Heart);
+        Assert.Equal(0, heartAfter.Count);
+        Assert.False(heartAfter.UserReacted);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().PostAsJsonAsync($"/api/articles/comments/{comment.Id}/reactions", new ToggleReactionRequest(ArticleReactionType.Like))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await reactor.PostAsJsonAsync($"/api/articles/comments/{comment.Id}/reactions", new ToggleReactionRequest((ArticleReactionType)999))).StatusCode);
+    }
+
+    [Fact]
+    public async Task CommentsLock_BlocksOtherUsers_ButArticleAuthorAndAdminCanStillPost()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var created = await CreateArticleAsync(author);
+        var (other, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var otherComment = await (await other.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Before lock"))).Content.ReadFromJsonAsync<ArticleCommentDto>();
+        var admin = await CreateAuthenticatedClientAsync("admin@chessweb.local", "Admin123!#");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.PutAsJsonAsync($"/api/articles/{created.Id}/comments-lock", new SetCommentsLockRequest(true))).StatusCode);
+        var lockResponse = await author.PutAsJsonAsync($"/api/articles/{created.Id}/comments-lock", new SetCommentsLockRequest(true));
+        Assert.Equal(HttpStatusCode.OK, lockResponse.StatusCode);
+        Assert.True((await lockResponse.Content.ReadFromJsonAsync<CommentsLockDto>())!.CommentsLocked);
+        Assert.True((await other.GetFromJsonAsync<ArticleDto>($"/api/articles/{created.Id}"))!.CommentsLocked);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("After lock"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.PutAsJsonAsync($"/api/articles/comments/{otherComment!.Id}", new CreateCommentRequest("Edit after lock"))).StatusCode);
+        var otherView = await other.GetFromJsonAsync<PagedResult<ArticleCommentDto>>($"/api/articles/{created.Id}/comments");
+        Assert.False(Assert.Single(otherView!.Items).CanEdit);
+
+        Assert.Equal(HttpStatusCode.OK, (await author.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Author after lock"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("Admin after lock"))).StatusCode);
+
+        var unlock = await admin.PutAsJsonAsync($"/api/articles/{created.Id}/comments-lock", new SetCommentsLockRequest(false));
+        Assert.False((await unlock.Content.ReadFromJsonAsync<CommentsLockDto>())!.CommentsLocked);
+        Assert.Equal(HttpStatusCode.OK, (await other.PostAsJsonAsync($"/api/articles/{created.Id}/comments", new CreateCommentRequest("After unlock"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task InlineUpload_IsPrivateUntilLinked_ThenRichArticleLinksIt()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var upload = await UploadInlineAttachmentAsync(author);
+        var anonymous = _factory.CreateClient();
+        var (other, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+
+        Assert.Equal(HttpStatusCode.OK, (await author.GetAsync($"/api/articles/attachments/{upload.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/api/articles/attachments/{upload.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync($"/api/articles/attachments/{upload.Id}")).StatusCode);
+
+        var content = RichDoc(Paragraph("See the diagram"), ImageNode(upload.Id));
+        var otherAttempt = await other.PostAsync("/api/articles", BuildCreateArticleForm("Stolen image", content, contentFormat: ArticleContentFormat.RichJson));
+        Assert.Equal(HttpStatusCode.BadRequest, otherAttempt.StatusCode);
+
+        var response = await author.PostAsync("/api/articles", BuildCreateArticleForm("Rich with image", content, contentFormat: ArticleContentFormat.RichJson));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var article = await response.Content.ReadFromJsonAsync<ArticleDto>();
+        Assert.Equal(ArticleContentFormat.RichJson, article!.ContentFormat);
+        Assert.Contains(article.Attachments, a => a.Id == upload.Id);
+        Assert.Equal("See the diagram", article.Excerpt);
+
+        Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync($"/api/articles/attachments/{upload.Id}")).StatusCode);
+        var reuseAttempt = await author.PostAsync("/api/articles", BuildCreateArticleForm("Reuse image", content, contentFormat: ArticleContentFormat.RichJson));
+        Assert.Equal(HttpStatusCode.BadRequest, reuseAttempt.StatusCode);
+
+        var update = await author.PutAsJsonAsync($"/api/articles/{article.Id}",
+            new UpdateArticleRequest(article.Title, RichDoc(Paragraph("Image removed")), ContentFormat: ArticleContentFormat.RichJson));
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        var updated = await update.Content.ReadFromJsonAsync<ArticleDto>();
+        Assert.Contains(updated!.Attachments, a => a.Id == upload.Id);
+
+        await author.DeleteAsync($"/api/articles/{article.Id}");
+    }
+
+    [Fact]
+    public async Task CreateArticle_RejectsInvalidRichContent()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var script = RichDoc("""{"type":"script","content":[{"type":"text","text":"x"}]}""");
+        Assert.Equal(HttpStatusCode.BadRequest, (await author.PostAsync("/api/articles", BuildCreateArticleForm("Bad rich", script, contentFormat: ArticleContentFormat.RichJson))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await author.PostAsync("/api/articles", BuildCreateArticleForm("Bad rich", "not json", contentFormat: ArticleContentFormat.RichJson))).StatusCode);
+        var missingImage = RichDoc(ImageNode(Guid.NewGuid()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await author.PostAsync("/api/articles", BuildCreateArticleForm("Bad rich", missingImage, contentFormat: ArticleContentFormat.RichJson))).StatusCode);
+    }
+
+    [Fact]
+    public async Task SearchMatchesExtractedTextOfRichArticle()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var keyword = $"zugzwang{Guid.NewGuid():N}";
+        var response = await author.PostAsync("/api/articles", BuildCreateArticleForm($"Rich search {Guid.NewGuid():N}", RichDoc(Paragraph($"A lesson on {keyword}")), contentFormat: ArticleContentFormat.RichJson));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var article = await response.Content.ReadFromJsonAsync<ArticleDto>();
+
+        var result = await _factory.CreateClient().GetFromJsonAsync<PagedResult<ArticleDto>>($"/api/articles?search={keyword}");
+        var found = Assert.Single(result!.Items);
+        Assert.Equal(article!.Id, found.Id);
+        Assert.Equal($"A lesson on {keyword}", found.Excerpt);
+        Assert.Null(found.Collection);
+
+        await author.DeleteAsync($"/api/articles/{article.Id}");
+    }
+
+    [Fact]
+    public async Task GameCollectionLink_RequiresOwnership_IsReturnedInDetail_AndIsClearedOnCollectionDelete()
+    {
+        var (author, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var (other, _) = await RegisterAndLoginAsync(_factory.CreateClient());
+        var collectionRequest = new CreateGameCollectionRequest("Linked games", new List<CreateGameCollectionGameRequest> { new("1. e4 e5", "Game A"), new("1. d4 d5", "Game B") });
+        var otherCollection = await (await other.PostAsJsonAsync("/api/gamecollections", collectionRequest)).Content.ReadFromJsonAsync<GameCollectionDetailDto>();
+        var ownCollection = await (await author.PostAsJsonAsync("/api/gamecollections", collectionRequest)).Content.ReadFromJsonAsync<GameCollectionDetailDto>();
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await author.PostAsync("/api/articles", BuildCreateArticleForm("Foreign collection", "Content", gameCollectionId: otherCollection!.Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await author.PostAsync("/api/articles", BuildCreateArticleForm("Missing collection", "Content", gameCollectionId: Guid.NewGuid()))).StatusCode);
+
+        var response = await author.PostAsync("/api/articles", BuildCreateArticleForm("Own collection", "Content", gameCollectionId: ownCollection!.Id));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var article = await response.Content.ReadFromJsonAsync<ArticleDto>();
+
+        var detail = await _factory.CreateClient().GetFromJsonAsync<ArticleDto>($"/api/articles/{article!.Id}");
+        Assert.Equal(ownCollection.Id, detail!.GameCollectionId);
+        Assert.Equal(new[] { "Game A", "Game B" }, detail.Collection!.Games.Select(g => g.Label));
+        Assert.Equal(ownCollection.Games.Select(g => g.Id), detail.Collection.Games.Select(g => g.Id));
+
+        var foreignUpdate = await author.PutAsJsonAsync($"/api/articles/{article.Id}", new UpdateArticleRequest("Own collection", "Content", GameCollectionId: otherCollection.Id));
+        Assert.Equal(HttpStatusCode.Forbidden, foreignUpdate.StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await author.DeleteAsync($"/api/gamecollections/{ownCollection.Id}")).StatusCode);
+        var afterDelete = await author.GetFromJsonAsync<ArticleDto>($"/api/articles/{article.Id}");
+        Assert.Null(afterDelete!.GameCollectionId);
+        Assert.Null(afterDelete.Collection);
+
+        await author.DeleteAsync($"/api/articles/{article.Id}");
+        await other.DeleteAsync($"/api/gamecollections/{otherCollection.Id}");
     }
 }

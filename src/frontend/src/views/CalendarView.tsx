@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
 import { CalendarEvent } from '../types';
+import { useConfirm } from '../components/ConfirmDialog';
 import {
   Calendar as CalendarIcon,
   MapPin,
@@ -54,6 +55,7 @@ interface CalendarViewProps {
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = false }) => {
   const { t, i18n } = useTranslation();
+  const confirm = useConfirm();
   const { isAdmin, isAuthenticated } = useAuth();
   const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
   const [subscribedEventIds, setSubscribedEventIds] = useState<Set<string>>(new Set());
@@ -267,8 +269,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
   };
 
   const handleDeleteEvent = async (id: string, deleteSeries = false) => {
-    const confirmPrompt = deleteSeries ? t('calendar.deleteEntireSeries') + '?' : t('common.deleteConfirm');
-    if (!window.confirm(confirmPrompt)) return;
+    const confirmed = await confirm(deleteSeries
+      ? { title: t('confirmDialog.deleteSeriesTitle'), message: t('confirmDialog.deleteSeriesMessage'), confirmLabel: t('calendar.deleteEntireSeries'), destructive: true }
+      : { title: t('confirmDialog.deleteEventTitle'), message: t('common.deleteConfirm'), confirmLabel: t('common.delete'), destructive: true });
+    if (!confirmed) return;
     try {
       await apiClient.delete(`/calendar/events/${id}`, {
         params: { deleteSeries },

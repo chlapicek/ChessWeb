@@ -20,7 +20,10 @@ public record ArticleCommentDto(
     DateTime? UpdatedAt,
     Guid AuthorId,
     string AuthorName,
-    string? AuthorRating
+    string? AuthorRating,
+    IReadOnlyList<ReactionSummaryDto> Reactions,
+    bool CanEdit,
+    bool CanDelete
 );
 
 public record ReactionSummaryDto(
@@ -29,11 +32,19 @@ public record ReactionSummaryDto(
     bool UserReacted
 );
 
+public record ArticleCollectionDto(
+    Guid Id,
+    string Name,
+    IReadOnlyList<GameCollectionGameDto> Games
+);
+
 public record ArticleDto(
     Guid Id,
     string Title,
     string? Summary,
     string Content,
+    ArticleContentFormat ContentFormat,
+    string Excerpt,
     string? PgnData,
     string? FenData,
     bool IsPublished,
@@ -43,9 +54,11 @@ public record ArticleDto(
     string AuthorName,
     string? AuthorRating,
     IReadOnlyList<AttachmentDto> Attachments,
-    IReadOnlyList<ArticleCommentDto> Comments,
     IReadOnlyList<ReactionSummaryDto> Reactions,
-    int CommentsCount
+    int CommentsCount,
+    bool CommentsLocked,
+    Guid? GameCollectionId,
+    ArticleCollectionDto? Collection
 );
 
 public record CreateArticleRequest(
@@ -53,20 +66,33 @@ public record CreateArticleRequest(
     string Content,
     string? Summary = null,
     string? PgnData = null,
-    string? FenData = null
+    string? FenData = null,
+    ArticleContentFormat ContentFormat = ArticleContentFormat.PlainText,
+    Guid? GameCollectionId = null
 );
 
+// GameCollectionId is always applied: null unlinks the collection.
 public record UpdateArticleRequest(
     string Title,
     string Content,
     string? Summary = null,
     string? PgnData = null,
     string? FenData = null,
-    bool? IsPublished = null
+    bool? IsPublished = null,
+    ArticleContentFormat ContentFormat = ArticleContentFormat.PlainText,
+    Guid? GameCollectionId = null
 );
 
 public record CreateCommentRequest(
     string Content
+);
+
+public record SetCommentsLockRequest(
+    bool Locked
+);
+
+public record CommentsLockDto(
+    bool CommentsLocked
 );
 
 public record ToggleReactionRequest(

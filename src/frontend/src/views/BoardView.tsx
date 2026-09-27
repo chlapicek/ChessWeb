@@ -9,6 +9,7 @@ import { Chess } from 'chess.js';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
 import { GameCollectionSummary, GameCollectionDetail } from '../types';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const STARTER_PGN = `1. e4 e5 2. Nf3 Nc6 3. Bb5 a6`;
 
@@ -35,6 +36,7 @@ const sanitizeDownloadFileName = (name: string) => {
 export const BoardView: React.FC = () => {
   const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
+  const confirm = useConfirm();
   const [pgn, setPgn] = useState(STARTER_PGN);
   const [loadedPgn, setLoadedPgn] = useState<string | undefined>(STARTER_PGN);
   const [loadVersion, setLoadVersion] = useState(0);
@@ -168,7 +170,13 @@ export const BoardView: React.FC = () => {
   };
 
   const handleDeleteCollection = async (id: string) => {
-    if (!window.confirm(t('board.deleteCollectionConfirm'))) return;
+    const confirmed = await confirm({
+      title: t('confirmDialog.deleteCollectionTitle'),
+      message: t('board.deleteCollectionConfirm'),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     setCollectionActionId(id);
     try {
       await apiClient.delete(`/gamecollections/${id}`);

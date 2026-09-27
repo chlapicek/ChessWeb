@@ -98,19 +98,30 @@ public class GameCollectionsController : ControllerBase
         if (validationError != null) return BadRequest(new { message = validationError });
 
         collection.Name = request.Name.Trim();
-        _context.GameCollectionGames.RemoveRange(collection.Games);
-        collection.Games.Clear();
+        var existingGames = collection.Games.ToDictionary(g => g.Id);
+        var keptGameIds = new HashSet<Guid>();
         for (var index = 0; index < request.Games.Count; index++)
         {
             var game = request.Games[index];
+            var pgn = game.Pgn.Trim();
+            var label = string.IsNullOrWhiteSpace(game.Label) ? null : game.Label.Trim();
+            if (game.Id is Guid gameId && existingGames.TryGetValue(gameId, out var existing) && keptGameIds.Add(gameId))
+            {
+                existing.OrderIndex = index;
+                existing.Pgn = pgn;
+                existing.Label = label;
+                continue;
+            }
+
             _context.GameCollectionGames.Add(new GameCollectionGame
             {
                 GameCollectionId = collection.Id,
                 OrderIndex = index,
-                Pgn = game.Pgn.Trim(),
-                Label = string.IsNullOrWhiteSpace(game.Label) ? null : game.Label.Trim()
+                Pgn = pgn,
+                Label = label
             });
         }
+        _context.GameCollectionGames.RemoveRange(existingGames.Values.Where(g => !keptGameIds.Contains(g.Id)));
         collection.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -130,6 +141,11 @@ public class GameCollectionsController : ControllerBase
         if (collection == null) return NotFound();
         if (!CanManage(collection)) return Forbid();
 
+        var linkedArticles = await _context.Articles.Where(a => a.GameCollectionId == id).ToListAsync(cancellationToken);
+        foreach (var article in linkedArticles)
+        {
+            article.GameCollectionId = null;
+        }
         _context.GameCollections.Remove(collection);
         await _context.SaveChangesAsync(cancellationToken);
         return NoContent();
@@ -153,7 +169,7 @@ public class GameCollectionsController : ControllerBase
         return File(bytes, "application/x-chess-pgn", fileName);
     }
 
-    private static string? ValidateRequest(string name, List<CreateGameCollectionGameRequest> games)
+    private static string? ValidateRequest(string name, IReadOnlyCollection<IGameCollectionGameInput>? games)
     {
         if (string.IsNullOrWhiteSpace(name)) return "Collection name is required.";
         if (name.Trim().Length > MaxNameLength) return $"Collection name cannot exceed {MaxNameLength} characters.";

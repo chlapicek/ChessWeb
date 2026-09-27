@@ -60,7 +60,7 @@ public class GameCollectionsControllerTests : IClassFixture<WebApplicationFactor
         var getResponse = await client.GetAsync($"/api/gamecollections/{created.Id}");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
 
-        var updateRequest = new UpdateGameCollectionRequest("Championship Round 1 (Updated)", new List<CreateGameCollectionGameRequest>
+        var updateRequest = new UpdateGameCollectionRequest("Championship Round 1 (Updated)", new List<UpdateGameCollectionGameRequest>
         {
             new("1. d4 d5 2. c4 e6", "Game 1 replay")
         });
@@ -90,7 +90,7 @@ public class GameCollectionsControllerTests : IClassFixture<WebApplicationFactor
         var forbiddenGet = await other.GetAsync($"/api/gamecollections/{created!.Id}");
         Assert.Equal(HttpStatusCode.Forbidden, forbiddenGet.StatusCode);
 
-        var forbiddenUpdate = await other.PutAsJsonAsync($"/api/gamecollections/{created.Id}", new UpdateGameCollectionRequest("Hijacked", new List<CreateGameCollectionGameRequest> { new("1. e4 e5", null) }));
+        var forbiddenUpdate = await other.PutAsJsonAsync($"/api/gamecollections/{created.Id}", new UpdateGameCollectionRequest("Hijacked", new List<UpdateGameCollectionGameRequest> { new("1. e4 e5", null) }));
         Assert.Equal(HttpStatusCode.Forbidden, forbiddenUpdate.StatusCode);
 
         var forbiddenDelete = await other.DeleteAsync($"/api/gamecollections/{created.Id}");
@@ -138,6 +138,42 @@ public class GameCollectionsControllerTests : IClassFixture<WebApplicationFactor
         var games = Enumerable.Range(1, 101).Select(i => new CreateGameCollectionGameRequest("1. e4 e5", $"Game {i}")).ToList();
         var response = await client.PostAsJsonAsync("/api/gamecollections", new CreateGameCollectionRequest("Too many", games));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateCollection_PreservesGameIdsWhenIdIsSent_AndReplacesOthers()
+    {
+        var client = await CreateAuthenticatedClientAsync("katerina.nemcova@chessweb.local", "Player123!#");
+        var createResponse = await client.PostAsJsonAsync("/api/gamecollections", SampleRequest("Id preservation", gameCount: 3));
+        var created = await createResponse.Content.ReadFromJsonAsync<GameCollectionDetailDto>();
+        Assert.NotNull(created);
+        try
+        {
+            var first = created!.Games[0];
+            var third = created.Games[2];
+            var updateRequest = new UpdateGameCollectionRequest("Id preservation", new List<UpdateGameCollectionGameRequest>
+            {
+                new("1. c4 e5", "Moved third", third.Id),
+                new(first.Pgn, "Renamed first", first.Id),
+                new("1. d4 d5", "Brand new")
+            });
+
+            var updateResponse = await client.PutAsJsonAsync($"/api/gamecollections/{created.Id}", updateRequest);
+            Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+            var updated = await updateResponse.Content.ReadFromJsonAsync<GameCollectionDetailDto>();
+            Assert.NotNull(updated);
+            Assert.Equal(3, updated!.Games.Count);
+            Assert.Equal(third.Id, updated.Games[0].Id);
+            Assert.Equal("1. c4 e5", updated.Games[0].Pgn);
+            Assert.Equal(first.Id, updated.Games[1].Id);
+            Assert.Equal("Renamed first", updated.Games[1].Label);
+            Assert.DoesNotContain(updated.Games[2].Id, created.Games.Select(g => g.Id));
+            Assert.DoesNotContain(updated.Games, g => g.Id == created.Games[1].Id);
+        }
+        finally
+        {
+            await client.DeleteAsync($"/api/gamecollections/{created!.Id}");
+        }
     }
 
     [Fact]

@@ -92,10 +92,19 @@ export interface ArticleComment {
   articleId: string;
   content: string;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt?: string | null;
   authorId: string;
   authorName: string;
-  authorRating?: string;
+  authorRating?: string | null;
+  reactions: ReactionSummary[];
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+export type ArticleContentFormat = 0 | 1; // 0: PlainText (legacy), 1: RichJson
+
+export interface CommentsLockResult {
+  commentsLocked: boolean;
 }
 
 export interface GameCollectionSummary {
@@ -122,23 +131,33 @@ export interface GameCollectionDetail {
 }
 
 
+export interface ArticleCollection {
+  id: string;
+  name: string;
+  games: GameCollectionGame[];
+}
+
 export interface Article {
   id: string;
   title: string;
-  summary?: string;
+  summary?: string | null;
   content: string;
-  pgnData?: string;
-  fenData?: string;
+  contentFormat: ArticleContentFormat;
+  excerpt: string;
+  pgnData?: string | null;
+  fenData?: string | null;
   isPublished: boolean;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt?: string | null;
   authorId: string;
   authorName: string;
-  authorRating?: string;
+  authorRating?: string | null;
   attachments: Attachment[];
-  comments: ArticleComment[];
   reactions: ReactionSummary[];
   commentsCount: number;
+  commentsLocked: boolean;
+  gameCollectionId?: string | null;
+  collection?: ArticleCollection | null;
 }
 
 export type RecurrenceType = 0 | 1 | 2 | 3 | 4;

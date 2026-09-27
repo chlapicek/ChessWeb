@@ -144,6 +144,14 @@ describe('NotificationsView', () => {
     expect(await screen.findByText('There are no unread notifications.')).toBeInTheDocument();
   });
 
+  it('requests the persisted page size', async () => {
+    localStorage.setItem('chessweb_pageSize_notifications', '20');
+    renderView();
+
+    expect(await screen.findByText('Training change')).toBeInTheDocument();
+    expect(apiMocks.get).toHaveBeenCalledWith('/notifications', { params: { page: 1, pageSize: 20, unreadOnly: undefined } });
+  });
+
   it('explains when a captain has no teams to notify', async () => {
     apiMocks.get.mockImplementation(async (url: string) => {
       if (url === '/auth/me') return { data: user };

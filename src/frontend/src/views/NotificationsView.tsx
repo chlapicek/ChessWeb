@@ -6,8 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
 import { NotificationAudienceOptions, NotificationInbox, NotificationInboxItem } from '../types';
 import { Pagination } from '../components/Pagination';
-
-const PAGE_SIZE = 10;
+import { usePersistentPageSize } from '../hooks/usePersistentPageSize';
 
 export const NotificationsView: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -15,6 +14,7 @@ export const NotificationsView: React.FC = () => {
   const [inbox, setInbox] = useState<NotificationInbox | null>(null);
   const [options, setOptions] = useState<NotificationAudienceOptions | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePersistentPageSize('notifications', 10);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -39,7 +39,7 @@ export const NotificationsView: React.FC = () => {
     setLoading(true);
     setLoadError(false);
     apiClient.get<NotificationInbox>('/notifications', {
-      params: { page, pageSize: PAGE_SIZE, unreadOnly: unreadOnly || undefined },
+      params: { page, pageSize, unreadOnly: unreadOnly || undefined },
     }).then((response) => {
       if (active) setInbox(response.data);
     }).catch(() => {
@@ -48,7 +48,7 @@ export const NotificationsView: React.FC = () => {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [isAuthenticated, page, unreadOnly, reloadKey]);
+  }, [isAuthenticated, page, pageSize, unreadOnly, reloadKey]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -203,7 +203,14 @@ export const NotificationsView: React.FC = () => {
                 </li>
               ))}
             </ol>
-            <Pagination page={page} totalPages={inbox.totalPages} totalCount={inbox.totalCount} pageSize={inbox.pageSize} onPageChange={setPage} />
+            <Pagination
+              page={page}
+              totalPages={inbox.totalPages}
+              totalCount={inbox.totalCount}
+              pageSize={inbox.pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            />
           </>
         )}
       </section>

@@ -181,6 +181,76 @@
   box-shadow: 0 12px 20px rgba(31, 122, 70, 0.18);
 }
 
+/* Rich article content (TipTap output) */
+.rich-content .ProseMirror {
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+.rich-content-editor .ProseMirror {
+  min-height: 14rem;
+}
+
+.rich-content-editor .ProseMirror:focus-visible {
+  outline: none;
+}
+
+.rich-content p {
+  margin: 0.75em 0;
+}
+
+.rich-content h2 {
+  @apply mt-6 mb-2 text-xl font-bold text-slate-900 dark:text-white;
+}
+
+.rich-content h3 {
+  @apply mt-5 mb-2 text-lg font-semibold text-slate-900 dark:text-white;
+}
+
+.rich-content h4 {
+  @apply mt-4 mb-2 text-base font-semibold text-slate-900 dark:text-white;
+}
+
+.rich-content ul {
+  @apply my-3 list-disc pl-6;
+}
+
+.rich-content ol {
+  @apply my-3 list-decimal pl-6;
+}
+
+.rich-content li > p {
+  margin: 0.25em 0;
+}
+
+.rich-content blockquote {
+  @apply my-4 border-l-4 border-emerald-500/60 pl-4 italic text-slate-600 dark:text-slate-300;
+}
+
+.rich-content code {
+  @apply rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.85em] dark:bg-slate-800;
+}
+
+.rich-content pre {
+  @apply my-4 overflow-x-auto rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-100 dark:bg-slate-950;
+}
+
+.rich-content pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+
+.rich-content a {
+  @apply text-emerald-700 underline underline-offset-2 hover:text-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200;
+}
+
+.rich-content hr {
+  @apply my-6 border-slate-200 dark:border-slate-800;
+}
+
+.rich-content .ProseMirror-selectednode {
+  outline: none;
+}
+
 .dark .brand-button {
   color: #0b1a12;
 }

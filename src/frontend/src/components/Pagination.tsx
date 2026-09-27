@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { DEFAULT_PAGE_SIZE_OPTIONS } from '../hooks/usePersistentPageSize';
 
 interface PaginationProps {
   page: number;
@@ -8,6 +9,8 @@ interface PaginationProps {
   totalCount: number;
   pageSize: number;
   onPageChange: (newPage: number) => void;
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (size: number) => void;
 }
 
 export const Pagination: React.FC<PaginationProps> = ({
@@ -16,10 +19,19 @@ export const Pagination: React.FC<PaginationProps> = ({
   totalCount,
   pageSize,
   onPageChange,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  onPageSizeChange,
 }) => {
   const { t } = useTranslation();
+  const pageSizeSelectId = useId();
 
-  if (totalPages <= 1) return null;
+  const sizeOptions = pageSizeOptions.includes(pageSize)
+    ? pageSizeOptions
+    : [...pageSizeOptions, pageSize].sort((a, b) => a - b);
+  const showSizeSelector = !!onPageSizeChange && sizeOptions.length > 0 && totalCount > Math.min(...sizeOptions);
+  const showPageButtons = totalPages > 1;
+
+  if (!showPageButtons && !showSizeSelector) return null;
 
   const startItem = Math.min((page - 1) * pageSize + 1, totalCount);
   const endItem = Math.min(page * pageSize, totalCount);
@@ -41,12 +53,28 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-200 dark:border-slate-800 text-xs">
-      <div className="text-slate-500 dark:text-slate-400 font-medium">
-        {t('common.showing')} <span className="font-semibold text-slate-800 dark:text-slate-200">{startItem}</span> -{' '}
-        <span className="font-semibold text-slate-800 dark:text-slate-200">{endItem}</span> {t('common.of')}{' '}
-        <span className="font-semibold text-slate-800 dark:text-slate-200">{totalCount}</span> {t('common.items')}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="text-slate-500 dark:text-slate-400 font-medium">
+          {t('common.showing')} <span className="font-semibold text-slate-800 dark:text-slate-200">{startItem}</span> -{' '}
+          <span className="font-semibold text-slate-800 dark:text-slate-200">{endItem}</span> {t('common.of')}{' '}
+          <span className="font-semibold text-slate-800 dark:text-slate-200">{totalCount}</span> {t('common.items')}
+        </div>
+        {showSizeSelector && (
+          <div className="flex items-center gap-2">
+            <label htmlFor={pageSizeSelectId} className="font-medium text-slate-500 dark:text-slate-400">{t('common.itemsPerPage')}</label>
+            <select
+              id={pageSizeSelectId}
+              value={pageSize}
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 font-medium text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {sizeOptions.map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
+      {showPageButtons && (
       <div className="flex items-center gap-1.5">
         <button
           onClick={() => onPageChange(page - 1)}
@@ -106,6 +134,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
+      )}
     </div>
   );
 };

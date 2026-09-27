@@ -135,6 +135,34 @@ public static class DbInitializer
                 await context.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS \"IX_GameCollectionGames_GameCollectionId_OrderIndex\" ON \"GameCollectionGames\" (\"GameCollectionId\", \"OrderIndex\");");
                 await context.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS \"LoggingSettings\" (\"Id\" TEXT NOT NULL CONSTRAINT \"PK_LoggingSettings\" PRIMARY KEY, \"MinimumLevel\" TEXT NOT NULL, \"RetainedFileCountLimit\" INTEGER NOT NULL, \"UpdatedAt\" TEXT NOT NULL);");
 
+                using (var articleColumnsCommand = connection.CreateCommand())
+                {
+                    articleColumnsCommand.CommandText = "PRAGMA table_info('Articles');";
+                    using var articleColumnsReader = await articleColumnsCommand.ExecuteReaderAsync();
+                    var articleColumns = new HashSet<string>();
+                    while (await articleColumnsReader.ReadAsync()) articleColumns.Add(articleColumnsReader.GetString(1));
+                    if (articleColumns.Count > 0)
+                    {
+                        if (!articleColumns.Contains("ContentFormat")) await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Articles\" ADD COLUMN \"ContentFormat\" INTEGER NOT NULL DEFAULT 0;");
+                        if (!articleColumns.Contains("ContentText")) await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Articles\" ADD COLUMN \"ContentText\" TEXT NULL;");
+                        if (!articleColumns.Contains("CommentsLocked")) await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Articles\" ADD COLUMN \"CommentsLocked\" INTEGER NOT NULL DEFAULT 0;");
+                        if (!articleColumns.Contains("GameCollectionId")) await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Articles\" ADD COLUMN \"GameCollectionId\" TEXT NULL CONSTRAINT \"FK_Articles_GameCollections_GameCollectionId\" REFERENCES \"GameCollections\" (\"Id\");");
+                        await context.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS \"IX_Articles_GameCollectionId\" ON \"Articles\" (\"GameCollectionId\");");
+                        await context.Database.ExecuteSqlRawAsync("UPDATE \"Articles\" SET \"ContentText\" = \"Content\" WHERE \"ContentText\" IS NULL;");
+                    }
+                }
+                using (var attachmentColumnsCommand = connection.CreateCommand())
+                {
+                    attachmentColumnsCommand.CommandText = "PRAGMA table_info('Attachments');";
+                    using var attachmentColumnsReader = await attachmentColumnsCommand.ExecuteReaderAsync();
+                    var attachmentColumns = new HashSet<string>();
+                    while (await attachmentColumnsReader.ReadAsync()) attachmentColumns.Add(attachmentColumnsReader.GetString(1));
+                    if (attachmentColumns.Count > 0 && !attachmentColumns.Contains("UploadedByUserId")) await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Attachments\" ADD COLUMN \"UploadedByUserId\" TEXT NULL;");
+                }
+                await context.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS \"ArticleCommentReactions\" (\"Id\" TEXT NOT NULL CONSTRAINT \"PK_ArticleCommentReactions\" PRIMARY KEY, \"ReactionType\" INTEGER NOT NULL, \"CreatedAt\" TEXT NOT NULL, \"CommentId\" TEXT NOT NULL, \"UserId\" TEXT NOT NULL, CONSTRAINT \"FK_ArticleCommentReactions_ArticleComments_CommentId\" FOREIGN KEY (\"CommentId\") REFERENCES \"ArticleComments\" (\"Id\") ON DELETE CASCADE, CONSTRAINT \"FK_ArticleCommentReactions_AspNetUsers_UserId\" FOREIGN KEY (\"UserId\") REFERENCES \"AspNetUsers\" (\"Id\") ON DELETE RESTRICT);");
+                await context.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ArticleCommentReactions_CommentId_UserId_ReactionType\" ON \"ArticleCommentReactions\" (\"CommentId\", \"UserId\", \"ReactionType\");");
+                await context.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS \"IX_ArticleCommentReactions_UserId\" ON \"ArticleCommentReactions\" (\"UserId\");");
+
                 using (var userColumnsCommand = connection.CreateCommand())
                 {
                     userColumnsCommand.CommandText = "PRAGMA table_info('AspNetUsers');";
@@ -179,6 +207,15 @@ public static class DbInitializer
             await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[NotificationRecipients]', N'U') IS NULL BEGIN CREATE TABLE [NotificationRecipients] ([NotificationId] uniqueidentifier NOT NULL, [UserId] uniqueidentifier NOT NULL, [IsRead] bit NOT NULL, [ReadAt] datetime2 NULL, CONSTRAINT [PK_NotificationRecipients] PRIMARY KEY ([NotificationId], [UserId]), CONSTRAINT [FK_NotificationRecipients_Notifications_NotificationId] FOREIGN KEY ([NotificationId]) REFERENCES [Notifications] ([Id]) ON DELETE CASCADE, CONSTRAINT [FK_NotificationRecipients_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE CASCADE); CREATE INDEX [IX_NotificationRecipients_UserId_NotificationId] ON [NotificationRecipients] ([UserId], [NotificationId]); END");
             await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[Notifications]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[Notifications]') AND name = N'IX_Notifications_CreatedAt_Id') CREATE INDEX [IX_Notifications_CreatedAt_Id] ON [Notifications] ([CreatedAt], [Id]);");
             await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[NotificationRecipients]', N'U') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[NotificationRecipients]') AND name = N'IX_NotificationRecipients_UserId_NotificationId') CREATE INDEX [IX_NotificationRecipients_UserId_NotificationId] ON [NotificationRecipients] ([UserId], [NotificationId]);");
+            await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[Articles]', N'U') IS NOT NULL AND COL_LENGTH(N'Articles', N'ContentFormat') IS NULL ALTER TABLE [Articles] ADD [ContentFormat] int NOT NULL DEFAULT 0;");
+            await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[Articles]', N'U') IS NOT NULL AND COL_LENGTH(N'Articles', N'ContentText') IS NULL ALTER TABLE [Articles] ADD [ContentText] nvarchar(max) NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[Articles]', N'U') IS NOT NULL AND COL_LENGTH(N'Articles', N'CommentsLocked') IS NULL ALTER TABLE [Articles] ADD [CommentsLocked] bit NOT NULL DEFAULT 0;");
+            await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[Articles]', N'U') IS NOT NULL AND COL_LENGTH(N'Articles', N'GameCollectionId') IS NULL ALTER TABLE [Articles] ADD [GameCollectionId] uniqueidentifier NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF COL_LENGTH(N'Articles', N'GameCollectionId') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Articles_GameCollections_GameCollectionId') ALTER TABLE [Articles] ADD CONSTRAINT [FK_Articles_GameCollections_GameCollectionId] FOREIGN KEY ([GameCollectionId]) REFERENCES [GameCollections] ([Id]) ON DELETE NO ACTION;");
+            await context.Database.ExecuteSqlRawAsync("IF COL_LENGTH(N'Articles', N'GameCollectionId') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[Articles]') AND name = N'IX_Articles_GameCollectionId') CREATE INDEX [IX_Articles_GameCollectionId] ON [Articles] ([GameCollectionId]);");
+            await context.Database.ExecuteSqlRawAsync("IF COL_LENGTH(N'Articles', N'ContentText') IS NOT NULL UPDATE [Articles] SET [ContentText] = [Content] WHERE [ContentText] IS NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[Attachments]', N'U') IS NOT NULL AND COL_LENGTH(N'Attachments', N'UploadedByUserId') IS NULL ALTER TABLE [Attachments] ADD [UploadedByUserId] uniqueidentifier NULL;");
+            await context.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'[ArticleCommentReactions]', N'U') IS NULL BEGIN CREATE TABLE [ArticleCommentReactions] ([Id] uniqueidentifier NOT NULL CONSTRAINT [PK_ArticleCommentReactions] PRIMARY KEY, [ReactionType] int NOT NULL, [CreatedAt] datetime2 NOT NULL, [CommentId] uniqueidentifier NOT NULL, [UserId] uniqueidentifier NOT NULL, CONSTRAINT [FK_ArticleCommentReactions_ArticleComments_CommentId] FOREIGN KEY ([CommentId]) REFERENCES [ArticleComments] ([Id]) ON DELETE CASCADE, CONSTRAINT [FK_ArticleCommentReactions_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION); CREATE UNIQUE INDEX [IX_ArticleCommentReactions_CommentId_UserId_ReactionType] ON [ArticleCommentReactions] ([CommentId], [UserId], [ReactionType]); CREATE INDEX [IX_ArticleCommentReactions_UserId] ON [ArticleCommentReactions] ([UserId]); END");
         }
 
         await EnsureAvailabilityTeamOwnershipAsync(context);
@@ -400,6 +437,7 @@ public static class DbInitializer
                     Title = title,
                     Summary = summary,
                     Content = content,
+                    ContentText = content,
                     PgnData = pgnData,
                     FenData = pgnData == null ? null : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                     AuthorId = adminUser.Id,

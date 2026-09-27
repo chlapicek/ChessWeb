@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
 import { User, CalendarFeed, Partner, LoggingSettings } from '../types';
 import { Pagination } from '../components/Pagination';
+import { usePersistentPageSize } from '../hooks/usePersistentPageSize';
 import { TeamManager } from '../components/TeamManager';
 import { Shield, UserCheck, RefreshCw, Plus, Trash2, Handshake, Pencil, ChevronUp, ChevronDown, X, ScrollText } from 'lucide-react';
 
@@ -17,7 +18,7 @@ export const AdminView: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [userPage, setUserPage] = useState(1);
-  const userPageSize = 5;
+  const [userPageSize, setUserPageSize] = usePersistentPageSize('adminUsers', 5);
   const filteredUsers = users.filter((member) => {
     const search = userSearch.trim().toLowerCase();
     return !search || member.fullName.toLowerCase().includes(search) || member.email.toLowerCase().includes(search);
@@ -471,15 +472,14 @@ export const AdminView: React.FC = () => {
         </div>
 
 
-        {filteredUsers.length > userPageSize && (
-          <Pagination
-            page={userPage}
-            totalPages={Math.ceil(filteredUsers.length / userPageSize)}
-            totalCount={filteredUsers.length}
-            pageSize={userPageSize}
-            onPageChange={(newPage) => setUserPage(newPage)}
-          />
-        )}
+        <Pagination
+          page={userPage}
+          totalPages={Math.ceil(filteredUsers.length / userPageSize)}
+          totalCount={filteredUsers.length}
+          pageSize={userPageSize}
+          onPageChange={(newPage) => setUserPage(newPage)}
+          onPageSizeChange={(size) => { setUserPageSize(size); setUserPage(1); }}
+        />
       </div>
 
       {isSuperAdmin && (
