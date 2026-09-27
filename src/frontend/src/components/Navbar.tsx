@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +27,42 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
   const location = useLocation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const desktopMenuRef = useRef<HTMLDivElement>(null);
+  const desktopToggleRef = useRef<HTMLButtonElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
+  const mobilePanelRef = useRef<HTMLDivElement>(null);
+
+  const isInsideMoreMenu = (node: Node | null) =>
+    !!node && [desktopMenuRef, mobileToggleRef, mobilePanelRef].some((ref) => ref.current?.contains(node));
+
+  const handleMoreMenuBlur = (event: React.FocusEvent) => {
+    if (event.relatedTarget && !isInsideMoreMenu(event.relatedTarget as Node)) setIsMoreOpen(false);
+  };
+
+  useEffect(() => {
+    setIsMoreOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isMoreOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!isInsideMoreMenu(event.target as Node)) setIsMoreOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      setIsMoreOpen(false);
+      // Both toggles exist in the DOM; only the one for the current breakpoint is rendered visibly.
+      [desktopToggleRef.current, mobileToggleRef.current].find((toggle) => toggle?.offsetParent)?.focus();
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMoreOpen]);
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -90,11 +126,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
             <span>{t('nav.calendar')}</span>
           </NavLink>
 
-          <div className="relative">
+          <div className="relative" ref={desktopMenuRef} onBlur={handleMoreMenuBlur}>
             <button
+              ref={desktopToggleRef}
               type="button"
               onClick={() => setIsMoreOpen((open) => !open)}
               aria-expanded={isMoreOpen}
+              aria-controls={isMoreOpen ? 'nav-more-desktop' : undefined}
               className={navLinkClass({ isActive: isMoreOpen || ['/board', '/team-availability', '/players', '/settings', '/admin'].includes(location.pathname) })}
             >
               <MoreHorizontal className="h-4 w-4" />
@@ -102,7 +140,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
             </button>
 
             {isMoreOpen && (
-              <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+              <div id="nav-more-desktop" className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900">
                 <NavLink to="/board" onClick={() => setIsMoreOpen(false)} className={navLinkClass}>
                   <Crown className="h-4 w-4" />
                   <span>{t('nav.board')}</span>
@@ -190,9 +228,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
           {t('nav.calendar')}
         </NavLink>
         <button
+          ref={mobileToggleRef}
           type="button"
           onClick={() => setIsMoreOpen((open) => !open)}
+          onBlur={handleMoreMenuBlur}
           aria-expanded={isMoreOpen}
+          aria-controls={isMoreOpen ? 'nav-more-mobile' : undefined}
           className={mobileNavLinkClass({ isActive: isMoreOpen || ['/board', '/team-availability', '/players', '/settings', '/admin'].includes(location.pathname) })}
         >
           {t('nav.more')}
@@ -200,7 +241,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
       </div>
 
       {isMoreOpen && (
-        <div className="md:hidden border-t border-slate-200 bg-white px-2 py-2 dark:border-slate-800 dark:bg-slate-900">
+        <div id="nav-more-mobile" ref={mobilePanelRef} onBlur={handleMoreMenuBlur} className="md:hidden border-t border-slate-200 bg-white px-2 py-2 dark:border-slate-800 dark:bg-slate-900">
           <div className="grid grid-cols-2 gap-1">
             <NavLink to="/board" onClick={() => setIsMoreOpen(false)} className={mobileNavLinkClass}>{t('nav.board')}</NavLink>
             <NavLink to="/team-availability" onClick={() => setIsMoreOpen(false)} className={mobileNavLinkClass}>{t('nav.teamAvailability')}</NavLink>
