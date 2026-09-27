@@ -48,6 +48,13 @@ public class NotificationsController : ControllerBase
         return await _notificationService.MarkReadAsync(userId, notificationId, cancellationToken) ? NoContent() : NotFound();
     }
 
+    [HttpDelete("{notificationId:guid}")]
+    public async Task<IActionResult> DeleteRead(Guid notificationId, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        return await _notificationService.DeleteReadAsync(userId, notificationId, cancellationToken) ? NoContent() : NotFound();
+    }
+
     [HttpPost]
     public async Task<ActionResult<NotificationSendResult>> Send([FromBody] SendNotificationRequest request, CancellationToken cancellationToken)
     {

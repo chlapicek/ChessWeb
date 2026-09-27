@@ -110,6 +110,20 @@ public sealed class NotificationService
         return true;
     }
 
+    public async Task<bool> DeleteReadAsync(Guid userId, Guid notificationId, CancellationToken cancellationToken)
+    {
+        var recipient = await _context.NotificationRecipients
+            .FirstOrDefaultAsync(row => row.UserId == userId && row.NotificationId == notificationId && row.IsRead, cancellationToken);
+        if (recipient == null)
+        {
+            return false;
+        }
+
+        _context.NotificationRecipients.Remove(recipient);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<NotificationSendResult> SendAsync(Guid senderId, string senderName, bool isAdministrator, SendNotificationRequest request, CancellationToken cancellationToken)
     {
         ValidateContent(request);

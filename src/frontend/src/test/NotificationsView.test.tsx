@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   put: vi.fn(),
+  delete: vi.fn(),
 }));
 
 vi.mock('../services/apiClient', () => ({ apiClient: apiMocks }));
@@ -65,6 +66,7 @@ describe('NotificationsView', () => {
     apiMocks.get.mockReset();
     apiMocks.post.mockReset();
     apiMocks.put.mockReset();
+    apiMocks.delete.mockReset();
     apiMocks.get.mockImplementation(async (url: string) => {
       if (url === '/auth/me') return { data: user };
       if (url === '/notifications/audience-options') return { data: options };
@@ -74,6 +76,8 @@ describe('NotificationsView', () => {
     });
     apiMocks.post.mockResolvedValue({ data: { recipientCount: 1 } });
     apiMocks.put.mockResolvedValue({ data: {} });
+    apiMocks.delete.mockResolvedValue({ data: {} });
+    vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
   it('renders the inbox and exposes the unread count on the accessible navigation bell', async () => {
@@ -92,6 +96,54 @@ describe('NotificationsView', () => {
     await waitFor(() => expect(apiMocks.put).toHaveBeenCalledWith('/notifications/notification-1/read'));
     expect(screen.getByText('Training change')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unread' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('confirms and deletes a read notification from only the current inbox', async () => {
+    let deleted = false;
+    apiMocks.get.mockImplementation(async (url: string) => {
+      if (url === '/auth/me') return { data: user };
+      if (url === '/notifications/audience-options') return { data: options };
+      if (url === '/notifications/unread-count') return { data: { count: 3 } };
+      if (url === '/notifications') {
+        return { data: deleted ? { ...inbox, items: [], totalCount: 0, totalPages: 0 } : { ...inbox, items: [{ ...inbox.items[0], isRead: true }] } };
+      }
+      return { data: [] };
+    });
+    apiMocks.delete.mockImplementation(async () => { deleted = true; return { data: {} }; });
+
+    renderView();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete notification: Training change' }));
+
+    expect(window.confirm).toHaveBeenCalledWith('Delete “Training change” from your inbox? This cannot be undone.');
+    await waitFor(() => expect(apiMocks.delete).toHaveBeenCalledWith('/notifications/notification-1'));
+    expect(await screen.findByRole('status')).toHaveTextContent('Deleted “Training change” from your inbox.');
+    expect(await screen.findByText('Your inbox is clear.')).toBeInTheDocument();
+  });
+
+  it('moves back one page when deleting its last notification', async () => {
+    let deleted = false;
+    const requestedPages: number[] = [];
+    apiMocks.get.mockImplementation(async (url: string, config?: { params?: { page?: number } }) => {
+      if (url === '/auth/me') return { data: user };
+      if (url === '/notifications/audience-options') return { data: options };
+      if (url === '/notifications/unread-count') return { data: { count: 3 } };
+      if (url === '/notifications') {
+        const requestedPage = config?.params?.page ?? 1;
+        requestedPages.push(requestedPage);
+        if (requestedPage === 2) return { data: { ...inbox, items: [{ ...inbox.items[0], isRead: true }], page: 2, totalCount: 11, totalPages: 2 } };
+        if (deleted) return { data: { ...inbox, totalCount: 10 } };
+        return { data: { ...inbox, items: [{ ...inbox.items[0], isRead: true }], totalCount: 11, totalPages: 2 } };
+      }
+      return { data: [] };
+    });
+    apiMocks.delete.mockImplementation(async () => { deleted = true; return { data: {} }; });
+
+    renderView();
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete notification: Training change' }));
+
+    await waitFor(() => expect(requestedPages.at(-1)).toBe(1));
+    expect(await screen.findByText('Training change')).toBeInTheDocument();
   });
 
   it('requires an administrator review before posting a broad audience notification', async () => {

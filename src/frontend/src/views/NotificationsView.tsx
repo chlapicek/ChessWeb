@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bell, Check, ExternalLink, Send } from 'lucide-react';
+import { Bell, Check, ExternalLink, Send, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
 import { NotificationAudienceOptions, NotificationInbox, NotificationInboxItem } from '../types';
@@ -32,6 +32,10 @@ export const NotificationsView: React.FC = () => {
   const [roles, setRoles] = useState<string[]>([]);
   const [accountSearch, setAccountSearch] = useState('');
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState('');
+  const inboxSectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -74,6 +78,28 @@ export const NotificationsView: React.FC = () => {
       setActionError(true);
     } finally {
       setMarkingId(null);
+    }
+  };
+
+  const deleteRead = async (item: NotificationInboxItem) => {
+    if (!window.confirm(t('notifications.confirmDelete', { title: item.title }))) return;
+    setDeletingId(item.id);
+    setDeleteError(false);
+    setDeleteSuccess('');
+    try {
+      await apiClient.delete(`/notifications/${item.id}`);
+      setDeleteSuccess(t('notifications.deleteSuccess', { title: item.title }));
+      inboxSectionRef.current?.focus();
+      if (inbox?.items.length === 1 && page > 1) {
+        setPage((currentPage) => currentPage - 1);
+      } else {
+        setReloadKey((value) => value + 1);
+      }
+      window.dispatchEvent(new Event('notifications:refresh'));
+    } catch {
+      setDeleteError(true);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -147,8 +173,10 @@ export const NotificationsView: React.FC = () => {
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">{t('notifications.title')}</h2>
       </header>
 
-      <section aria-label={t('notifications.title')}>
+      <section ref={inboxSectionRef} tabIndex={-1} aria-label={t('notifications.title')}>
         {actionError && <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-300">{t('notifications.markReadError')}</p>}
+        {deleteError && <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-300">{t('notifications.deleteError')}</p>}
+        {deleteSuccess && <p role="status" className="mb-3 text-sm text-emerald-700 dark:text-emerald-300">{deleteSuccess}</p>}
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="inline-flex rounded-lg border border-slate-300 p-1 dark:border-slate-700" role="group" aria-label={t('notifications.title')}>
             <button type="button" aria-pressed={!unreadOnly} onClick={() => { setUnreadOnly(false); setPage(1); }} className={`rounded px-3 py-1.5 text-sm ${!unreadOnly ? 'bg-slate-200 font-semibold dark:bg-slate-700' : 'text-slate-600 dark:text-slate-300'}`}>
@@ -185,10 +213,15 @@ export const NotificationsView: React.FC = () => {
                             {t(item.isRead ? 'notifications.readMarker' : 'notifications.unreadMarker')} · {t('notifications.sender', { name: item.senderName })} · {new Date(item.createdAt).toLocaleString(i18n.resolvedLanguage ?? i18n.language)}
                           </p>
                         </div>
-                        {!item.isRead && (
+                        {!item.isRead ? (
                           <button type="button" disabled={markingId === item.id} aria-label={t('notifications.markRead')} onClick={() => markRead(item)} className="inline-flex items-center gap-1.5 rounded border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
                             <Check className="h-3.5 w-3.5" aria-hidden="true" />
                             {t('notifications.markRead')}
+                          </button>
+                        ) : (
+                          <button type="button" disabled={deletingId !== null} aria-label={t('notifications.deleteLabel', { title: item.title })} onClick={() => deleteRead(item)} className="inline-flex items-center gap-1.5 rounded border border-rose-300 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950">
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            {t('notifications.delete')}
                           </button>
                         )}
                       </div>

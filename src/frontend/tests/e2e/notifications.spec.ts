@@ -101,6 +101,12 @@ test.describe('notification browser workflows', () => {
       await expect(recipientPage.getByRole('heading', { name: 'Captain team update' })).toBeVisible();
       await expect(recipientPage.getByRole('button', { name: 'Mark as read' })).toHaveCount(0);
 
+      recipientPage.once('dialog', (dialog) => dialog.accept());
+      await recipientPage.getByRole('button', { name: 'Delete notification: Captain team update' }).click();
+      await expect(recipientPage.getByRole('status')).toHaveText('Deleted “Captain team update” from your inbox.');
+      await expect(recipientPage.getByText('Your inbox is clear.')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Captain team update' })).toBeVisible();
+
       const controlSession = await createRecipientPage(browser, control);
       controlContext = controlSession.context;
       await expect(controlSession.page.getByText('Your inbox is clear.')).toBeVisible();

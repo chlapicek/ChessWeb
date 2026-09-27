@@ -136,6 +136,30 @@ public class NotificationsControllerTests : IClassFixture<WebApplicationFactory<
         Assert.Empty(unread!.Items);
     }
 
+    [Fact]
+    public async Task DeleteRead_RemovesOnlyTheAuthenticatedUsersReadCopy()
+    {
+        var anonymous = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.DeleteAsync($"/api/notifications/{Guid.NewGuid()}")).StatusCode);
+
+        var admin = await LoginAsync("admin@chessweb.local", "Admin123!#");
+        var (recipient, recipientUser) = await RegisterAsync();
+        var (otherRecipient, otherUser) = await RegisterAsync();
+        var (outsider, _) = await RegisterAsync();
+        var send = await admin.PostAsJsonAsync("/api/notifications", new SendNotificationRequest("Delete test", "Body", null, "admin", null, [recipientUser.Id, otherUser.Id], null));
+        Assert.Equal(HttpStatusCode.OK, send.StatusCode);
+        var result = (await send.Content.ReadFromJsonAsync<NotificationSendResult>())!;
+
+        Assert.Equal(HttpStatusCode.NotFound, (await recipient.DeleteAsync($"/api/notifications/{result.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await outsider.DeleteAsync($"/api/notifications/{result.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await recipient.PutAsync($"/api/notifications/{result.Id}/read", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await recipient.DeleteAsync($"/api/notifications/{result.Id}")).StatusCode);
+
+        Assert.Empty((await recipient.GetFromJsonAsync<NotificationInboxDto>("/api/notifications"))!.Items);
+        var otherInbox = await otherRecipient.GetFromJsonAsync<NotificationInboxDto>("/api/notifications");
+        Assert.Equal(result.Id, Assert.Single(otherInbox!.Items).Id);
+    }
+
     [Theory]
     [InlineData("https://example.com")]
     [InlineData("//example.com/path")]
