@@ -1,9 +1,10 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
+import { ConfirmProvider } from '../components/ConfirmDialog';
 import { Navbar } from '../components/Navbar';
 import { NotificationsView } from '../views/NotificationsView';
 import i18n from '../i18n';
@@ -49,13 +50,20 @@ const inbox = {
 const renderView = () => render(
   <ThemeProvider>
     <AuthProvider>
-      <MemoryRouter>
-        <Navbar onOpenLogin={() => {}} />
-        <NotificationsView />
-      </MemoryRouter>
+      <ConfirmProvider>
+        <MemoryRouter>
+          <Navbar onOpenLogin={() => {}} />
+          <NotificationsView />
+        </MemoryRouter>
+      </ConfirmProvider>
     </AuthProvider>
   </ThemeProvider>
 );
+
+const confirmDeletion = async () => {
+  const dialog = await screen.findByRole('alertdialog', { name: 'Delete notification?' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+};
 
 describe('NotificationsView', () => {
   beforeEach(async () => {
@@ -77,7 +85,6 @@ describe('NotificationsView', () => {
     apiMocks.post.mockResolvedValue({ data: { recipientCount: 1 } });
     apiMocks.put.mockResolvedValue({ data: {} });
     apiMocks.delete.mockResolvedValue({ data: {} });
-    vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
   it('renders the inbox and exposes the unread count on the accessible navigation bell', async () => {
@@ -112,9 +119,17 @@ describe('NotificationsView', () => {
     apiMocks.delete.mockImplementation(async () => { deleted = true; return { data: {} }; });
 
     renderView();
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete notification: Training change' }));
+    const deleteButton = await screen.findByRole('button', { name: 'Delete notification: Training change' });
 
-    expect(window.confirm).toHaveBeenCalledWith('Delete “Training change” from your inbox? This cannot be undone.');
+    fireEvent.click(deleteButton);
+    const dialog = await screen.findByRole('alertdialog', { name: 'Delete notification?' });
+    expect(dialog).toHaveTextContent('“Training change” will be removed from your inbox. This cannot be undone.');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(apiMocks.delete).not.toHaveBeenCalled();
+
+    fireEvent.click(deleteButton);
+    await confirmDeletion();
     await waitFor(() => expect(apiMocks.delete).toHaveBeenCalledWith('/notifications/notification-1'));
     expect(await screen.findByRole('status')).toHaveTextContent('Deleted “Training change” from your inbox.');
     expect(await screen.findByText('Your inbox is clear.')).toBeInTheDocument();
@@ -141,6 +156,7 @@ describe('NotificationsView', () => {
     renderView();
     fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Delete notification: Training change' }));
+    await confirmDeletion();
 
     await waitFor(() => expect(requestedPages.at(-1)).toBe(1));
     expect(await screen.findByText('Training change')).toBeInTheDocument();

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Bell, Check, ExternalLink, Send, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
+import { useConfirm } from '../components/ConfirmDialog';
 import { NotificationAudienceOptions, NotificationInbox, NotificationInboxItem } from '../types';
 import { Pagination } from '../components/Pagination';
 import { usePersistentPageSize } from '../hooks/usePersistentPageSize';
@@ -11,6 +12,7 @@ import { usePersistentPageSize } from '../hooks/usePersistentPageSize';
 export const NotificationsView: React.FC = () => {
   const { t, i18n } = useTranslation();
   const { isAuthenticated } = useAuth();
+  const confirm = useConfirm();
   const [inbox, setInbox] = useState<NotificationInbox | null>(null);
   const [options, setOptions] = useState<NotificationAudienceOptions | null>(null);
   const [page, setPage] = useState(1);
@@ -82,7 +84,13 @@ export const NotificationsView: React.FC = () => {
   };
 
   const deleteRead = async (item: NotificationInboxItem) => {
-    if (!window.confirm(t('notifications.confirmDelete', { title: item.title }))) return;
+    const confirmed = await confirm({
+      title: t('confirmDialog.deleteNotificationTitle'),
+      message: t('notifications.confirmDelete', { title: item.title }),
+      confirmLabel: t('common.delete'),
+      destructive: true,
+    });
+    if (!confirmed) return;
     setDeletingId(item.id);
     setDeleteError(false);
     setDeleteSuccess('');

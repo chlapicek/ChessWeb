@@ -52,6 +52,7 @@ export const en = {
     deleteSeriesMessage: 'All occurrences of this recurring event will be deleted.',
     deleteCollectionTitle: 'Delete collection?',
     deleteTeamTitle: 'Delete team?',
+    deleteNotificationTitle: 'Delete notification?',
   },
   gameCollection: {
     title: 'Games',
@@ -87,7 +88,7 @@ export const en = {
     markRead: 'Mark as read',
     delete: 'Delete',
     deleteLabel: 'Delete notification: {{title}}',
-    confirmDelete: 'Delete “{{title}}” from your inbox? This cannot be undone.',
+    confirmDelete: '“{{title}}” will be removed from your inbox. This cannot be undone.',
     deleteSuccess: 'Deleted “{{title}}” from your inbox.',
     deleteError: 'This notification could not be deleted.',
     sender: 'From {{name}}',

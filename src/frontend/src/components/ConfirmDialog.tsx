@@ -80,7 +80,7 @@ const ConfirmDialogView: React.FC<{ options: ConfirmOptions; onClose: (result: b
           )}
           <div className="min-w-0">
             <h2 id={titleId} className="text-base font-bold text-slate-900 dark:text-white">{options.title}</h2>
-            {options.message && <p id={messageId} className="mt-2 text-sm text-slate-600 dark:text-slate-300">{options.message}</p>}
+            {options.message && <p id={messageId} className="mt-2 break-words text-sm text-slate-600 dark:text-slate-300">{options.message}</p>}
           </div>
         </div>
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

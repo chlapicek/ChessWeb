@@ -52,6 +52,7 @@ export const cs = {
     deleteSeriesMessage: 'Budou smazány všechny výskyty této opakované události.',
     deleteCollectionTitle: 'Smazat kolekci?',
     deleteTeamTitle: 'Smazat tým?',
+    deleteNotificationTitle: 'Smazat oznámení?',
   },
   gameCollection: {
     title: 'Partie',
@@ -87,7 +88,7 @@ export const cs = {
     markRead: 'Označit jako přečtené',
     delete: 'Smazat',
     deleteLabel: 'Smazat oznámení: {{title}}',
-    confirmDelete: 'Opravdu chcete odebrat oznámení „{{title}}“ ze své schránky? Tuto akci nelze vrátit.',
+    confirmDelete: 'Oznámení „{{title}}“ bude smazáno z vaší schránky. Tuto akci nelze vrátit.',
     deleteSuccess: 'Oznámení „{{title}}“ bylo odebráno z vaší schránky.',
     deleteError: 'Oznámení se nepodařilo smazat.',
     sender: 'Od uživatele {{name}}',
