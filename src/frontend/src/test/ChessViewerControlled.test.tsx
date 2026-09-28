@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { Chess } from 'chess.js';
 import { ThemeProvider } from '../context/ThemeContext';
-import { ChessViewer, formatMoveLabel, formatMoveNumber, type ChessViewerState, type ViewerGame } from '../components/ChessViewer';
+import { ChessViewer, formatMoveLabel, formatMoveNumber, type ChessViewerState, type MainlineMove, type ViewerGame } from '../components/ChessViewer';
 import { describeGames, GameCollectionPanel } from '../components/GameCollectionPanel';
 import i18n from '../i18n';
 
@@ -105,7 +105,7 @@ describe('ChessViewer controlled API', () => {
     );
     const { rerender } = render(renderViewer({ gameKey: 'b', ply: 2, nonce: 1 }));
 
-    expect(lastState(onStateChange)).toEqual({ gameKey: 'b', ply: 2, san: 'd5', fen: fenAfter('d4', 'd5'), moveNumberLabel: '1...', isAnalyzing: false });
+    expect(lastState(onStateChange)).toEqual({ gameKey: 'b', ply: 2, san: 'd5', fen: fenAfter('d4', 'd5'), moveNumberLabel: '1...', isAnalyzing: false, atMainlineEnd: false });
     expect(screen.getByRole('button', { name: '1. d5' })).toHaveAttribute('aria-current', 'step');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
@@ -136,6 +136,49 @@ describe('ChessViewer controlled API', () => {
     const fen = '8/8/8/8/8/8/8/K1k5 w - - 0 1';
     render(<ThemeProvider><ChessViewer fen={fen} onStateChange={onStateChange} /></ThemeProvider>);
     expect(lastState(onStateChange)).toMatchObject({ gameKey: 'fen', ply: 0, fen });
+  });
+
+  describe('onMainlineMove', () => {
+    const renderRecording = (pgn: string, onMainlineMove: (move: MainlineMove) => boolean, onStateChange = vi.fn()) => {
+      const view = (games: ViewerGame[]) => (
+        <ThemeProvider><ChessViewer games={games} mode="analysis" hideGameSelector onMainlineMove={onMainlineMove} onStateChange={onStateChange} /></ThemeProvider>
+      );
+      const result = render(view([{ key: 'p0', pgn }]));
+      return { ...result, rerenderPgn: (next: string) => result.rerender(view([{ key: 'p0', pgn: next }])) };
+    };
+
+    it('records a move played at the end of the mainline and keeps it after the source updates', () => {
+      const onMainlineMove = vi.fn(() => true);
+      const onStateChange = vi.fn();
+      const { rerenderPgn } = renderRecording('1. e4 e5 *', onMainlineMove, onStateChange);
+      fireEvent.keyDown(document, { key: 'ArrowDown' });
+
+      drop('g1', 'f3');
+
+      expect(onMainlineMove).toHaveBeenCalledWith({ gameKey: 'p0', ply: 3, san: 'Nf3' });
+      expect(screen.getByRole('button', { name: '2. Nf3' })).toHaveAttribute('aria-current', 'step');
+      expect(screen.queryByText(i18n.t('chessboard.interactiveMode'))).not.toBeInTheDocument();
+
+      rerenderPgn('1. e4 e5 2. Nf3 *');
+
+      expect(screen.getByRole('button', { name: '2. Nf3' })).toHaveAttribute('aria-current', 'step');
+      expect(lastState(onStateChange)).toMatchObject({ gameKey: 'p0', ply: 3, san: 'Nf3', atMainlineEnd: true });
+    });
+
+    it('falls back to analysis in the middle of the game or when the move is declined', () => {
+      const onMainlineMove = vi.fn(() => false);
+      renderRecording('1. e4 e5 *', onMainlineMove);
+
+      fireEvent.click(screen.getByRole('button', { name: '1. e4' }));
+      drop('g8', 'f6');
+      expect(onMainlineMove).not.toHaveBeenCalled();
+      expect(screen.getByText(i18n.t('chessboard.interactiveMode'))).toBeInTheDocument();
+
+      fireEvent.keyDown(document, { key: 'ArrowDown' });
+      drop('g1', 'f3');
+      expect(onMainlineMove).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(i18n.t('chessboard.interactiveMode'))).toBeInTheDocument();
+    });
   });
 });
 

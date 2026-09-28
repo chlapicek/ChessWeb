@@ -306,6 +306,11 @@ export const cs = {
     insertPosition: 'Vložit pozici',
     insertGame: 'Vložit partii',
     insertMove: 'Vložit odkaz na tah',
+    boardRecordsMoves: 'Tahy zahrané na šachovnici se přidávají do PGN.',
+    boardAnalysisOnly: 'Tahy zahrané zde se neukládají. Pro přidání tahů přejděte na poslední tah partie z PGN.',
+    moveAddedToPgn: 'Tah {{move}} byl přidán do PGN.',
+    moveNotAddedToPgn: 'Tah se nepodařilo přidat do PGN, zobrazuje se jen jako analýza.',
+    undoAddedMove: 'Vrátit přidaný tah',
   },
   chessboard: {
     interactiveMode: 'Režim interaktivní analýzy',

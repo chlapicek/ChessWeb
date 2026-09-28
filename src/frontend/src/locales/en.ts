@@ -304,6 +304,11 @@ export const en = {
     insertPosition: 'Insert position',
     insertGame: 'Insert game',
     insertMove: 'Insert move reference',
+    boardRecordsMoves: 'Moves played on the board are added to the PGN.',
+    boardAnalysisOnly: 'Moves played here are not saved. Go to the last move of a game from the PGN to add moves to it.',
+    moveAddedToPgn: '{{move}} added to the PGN.',
+    moveNotAddedToPgn: 'The move could not be added to the PGN, so it is shown as analysis only.',
+    undoAddedMove: 'Undo added move',
   },
   chessboard: {
     interactiveMode: 'Interactive Analysis Mode',

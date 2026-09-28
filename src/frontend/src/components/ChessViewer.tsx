@@ -18,7 +18,10 @@ export type ChessViewerState = {
   fen: string;
   moveNumberLabel?: string;
   isAnalyzing: boolean;
+  atMainlineEnd: boolean;
 };
+
+export type MainlineMove = { gameKey?: string; ply: number; san: string };
 
 interface ChessViewerProps {
   pgn?: string;
@@ -35,6 +38,11 @@ interface ChessViewerProps {
   notationTarget?: HTMLElement | null;
   keyboardNavigationEnabled?: boolean;
   reloadToken?: number;
+  /**
+   * Analysis mode: called for a move played at the end of the mainline. Return true to record it instead of
+   * analysing; the parent must then update `games` to include the move, which the viewer shows optimistically.
+   */
+  onMainlineMove?: (move: MainlineMove) => boolean;
 }
 
 interface ParsedGame {
@@ -254,6 +262,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
   notationTarget,
   keyboardNavigationEnabled = true,
   reloadToken = 0,
+  onMainlineMove,
 }) => {
   const { theme } = useTheme();
   const { t, i18n } = useTranslation();
@@ -306,9 +315,17 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
     loadedSource.current = sourceSignature;
     awaitingGames.current = true;
     const nextGames = buildViewerGames(viewerGames, pgn, fen);
-    const activeKey = games[activeGame]?.key;
+    const current = games[activeGame];
+    const nextIndex = viewerGames ? Math.max(0, nextGames.findIndex((item) => item.key === current?.key)) : 0;
+    const next = nextGames[nextIndex];
+    const playedMoves = current?.history.slice(0, currentMoveIndex + 1) ?? [];
+    // Keep the board where it is when the reloaded game still contains the moves played so far.
+    if (viewerGames && pendingPly.current === null && !isAnalyzing && current && next && next.key === current.key && next.startFen === current.startFen
+      && playedMoves.every((move, index) => next.history[index] === move)) {
+      pendingPly.current = playedMoves.length;
+    }
     setGames(nextGames);
-    setActiveGame(viewerGames ? Math.max(0, nextGames.findIndex((item) => item.key === activeKey)) : 0);
+    setActiveGame(nextIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceSignature]);
 
@@ -373,9 +390,10 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
       fen: positionFen,
       moveNumberLabel: ply > 0 ? formatMoveNumber(ply, selectedGame?.startFen) : undefined,
       isAnalyzing,
+      atMainlineEnd: !isAnalyzing && currentMoveIndex === history.length - 1,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeKey, currentMoveIndex, currentSan, positionFen, isAnalyzing]);
+  }, [activeKey, currentMoveIndex, currentSan, positionFen, isAnalyzing, history.length]);
 
   const handleFirst = () => goToMove(-1);
   const handlePrev = () => {
@@ -433,6 +451,17 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
         const board = new Chess(positionFen);
         const move = board.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
         if (!move) return false;
+        const atMainlineEnd = !isAnalyzing && currentMoveIndex === history.length - 1;
+        if (atMainlineEnd && onMainlineMove?.({ gameKey: selectedGame?.key, ply: history.length + 1, san: move.san })) {
+          if (selectedGame) {
+            // Show the move at once; the recorded source arrives later and keeps this position.
+            const updatedHistory = [...history, move.san];
+            skipReset.current = true;
+            setGames((current) => current.map((item, index) => (index === activeGame ? { ...item, history: updatedHistory } : item)));
+            setCurrentMoveIndex(updatedHistory.length - 1);
+          }
+          return true;
+        }
         setCustomMoves((moves) => [...(isAnalyzing ? moves : []), move.san]);
         setIsAnalyzing(true);
         return true;
