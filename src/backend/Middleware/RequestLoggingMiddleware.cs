@@ -14,62 +14,37 @@ public class RequestLoggingMiddleware
         _logger = logger;
     }
 
-    private static string SanitizeForLog(string value)
-    {
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
-    }
-
     private static string SanitizeForLog(string? value)
     {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
-
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        return string.IsNullOrEmpty(value)
+            ? string.Empty
+            : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
-    private static string SanitizeForLog(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            var methodForLog = SanitizeForLog(request.Method);
-            var pathForLog = SanitizeForLog(request.Path.ToString());
-            var userIdForLog = SanitizeForLog(userId);
-            var ipForLog = SanitizeForLog(ip);
-        {
-            return string.Empty;
-        var sanitizedMethod = SanitizeForLog(request.Method);
-                methodForLog,
-                pathForLog,
-        return value.Replace("\r", "").Replace("\n", "");
-    }
-                userIdForLog,
-                ipForLog
+    public async Task InvokeAsync(HttpContext context)
     {
         var stopwatch = Stopwatch.StartNew();
         var request = context.Request;
-        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
-        var sanitizedPath = SanitizeForLog(request.Path.ToString());
-            var methodForLog = SanitizeForLog(request.Method);
-            var pathForLog = SanitizeForLog(request.Path.ToString());
-            var ipForLog = SanitizeForLog(ip);
-                sanitizedMethod,
+        var methodForLog = SanitizeForLog(request.Method);
+        var pathForLog = SanitizeForLog(request.Path.ToString());
+        var ipForLog = SanitizeForLog(context.Connection.RemoteIpAddress?.ToString() ?? "Unknown");
+
         try
         {
-                methodForLog,
-                pathForLog,
+            await _next(context);
+            stopwatch.Stop();
 
-                ipForLog
-            var statusCode = context.Response.StatusCode;
+            var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Anonymous";
+            var userIdForLog = SanitizeForLog(userId);
 
             _logger.LogInformation(
                 "[HTTP] {Method} {Path} responded {StatusCode} in {ElapsedMilliseconds} ms (User: {UserId}, IP: {IP})",
-                request.Method,
-                sanitizedPath,
-                statusCode,
-                sanitizedMethod,
-                userId,
-                ip
+                methodForLog,
+                pathForLog,
+                context.Response.StatusCode,
+                stopwatch.ElapsedMilliseconds,
+                userIdForLog,
+                ipForLog
             );
         }
         catch (Exception ex)
@@ -78,10 +53,10 @@ public class RequestLoggingMiddleware
             _logger.LogError(
                 ex,
                 "[HTTP ERROR] {Method} {Path} failed after {ElapsedMilliseconds} ms (IP: {IP})",
-                request.Method,
-                sanitizedPath,
+                methodForLog,
+                pathForLog,
                 stopwatch.ElapsedMilliseconds,
-                ip
+                ipForLog
             );
             throw;
         }
