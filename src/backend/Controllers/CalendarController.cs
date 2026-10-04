@@ -143,7 +143,8 @@ public class CalendarController : ControllerBase
         }
 
         await _context.SaveChangesAsync();
-        _logger.LogInformation("Created {Count} calendar event(s) for '{Title}'", createdEvents.Count, request.Title);
+        var safeTitleForLog = Regex.Replace(request.Title ?? string.Empty, @"[\r\n\0\f\v\u0085\u2028\u2029]+", " ");
+        _logger.LogInformation("Created {Count} calendar event(s) for '{Title}'", createdEvents.Count, safeTitleForLog);
 
         return Ok(createdEvents);
     }
