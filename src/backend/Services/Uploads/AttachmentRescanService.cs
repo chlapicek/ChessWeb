@@ -92,7 +92,8 @@ public sealed class AttachmentRescanService : BackgroundService
                         attachment.QuarantinedAt = DateTime.UtcNow;
                         attachment.QuarantineReason = result.Signature?[..Math.Min(result.Signature.Length, 300)];
                         quarantined++;
-                        _logger.LogWarning("[RESCAN] Quarantined attachment {AttachmentId}: {Signature}", attachment.Id, result.Signature);
+                        var safeSignature = SanitizeForLog(result.Signature);
+                        _logger.LogWarning("[RESCAN] Quarantined attachment {AttachmentId}: {Signature}", attachment.Id, safeSignature);
                     }
                 }
 
@@ -103,6 +104,14 @@ public sealed class AttachmentRescanService : BackgroundService
         }
 
         return new RescanOutcome(scanned, quarantined, true);
+    }
+
+    private static string? SanitizeForLog(string? value)
+    {
+        if (value == null) return null;
+
+        var normalized = value.Replace("\r", " ").Replace("\n", " ");
+        return new string(normalized.Where(c => !char.IsControl(c)).ToArray());
     }
 
     private async Task<byte[]?> ReadStoredFileAsync(IFileStorageService storage, string storedFileName, Guid attachmentId, CancellationToken cancellationToken)
