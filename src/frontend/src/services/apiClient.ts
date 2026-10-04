@@ -7,11 +7,41 @@ export const apiClient = axios.create({
   baseURL: API_BASE_URL,
 });
 
-apiClient.interceptors.request.use((config) => {
+interface CsrfTokenResponse {
+  requestToken: string;
+}
+
+let csrfToken: string | null = null;
+let csrfTokenRequest: Promise<string> | null = null;
+
+const getCsrfToken = (): Promise<string> => {
+  if (csrfToken) return Promise.resolve(csrfToken);
+  if (!csrfTokenRequest) {
+    csrfTokenRequest = apiClient.get<CsrfTokenResponse>('/csrf/token', { withCredentials: true })
+      .then(({ data }) => {
+        csrfToken = data.requestToken;
+        return csrfToken;
+      })
+      .finally(() => {
+        csrfTokenRequest = null;
+      });
+  }
+  return csrfTokenRequest;
+};
+
+const unsafeMethods = new Set(['post', 'put', 'patch', 'delete']);
+
+apiClient.interceptors.request.use(async (config) => {
   const token = localStorage.getItem('chessweb_token');
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  if (config.method && unsafeMethods.has(config.method.toLowerCase())) {
+    config.withCredentials = true;
+    config.headers['X-CSRF-TOKEN'] = await getCsrfToken();
+  }
+
   logger.debug(`[API REQ] ${config.method?.toUpperCase()} ${config.url}`, config.params || config.data);
   return config;
 });

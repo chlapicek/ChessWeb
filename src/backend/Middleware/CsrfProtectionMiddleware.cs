@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Antiforgery;
+
 namespace ChessWeb.Middleware;
 
 /// <summary>Cross-origin frontends trusted by both CORS and CSRF checks (configured via Cors:AllowedOrigins).</summary>
@@ -24,30 +26,57 @@ public class CsrfProtectionMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<CsrfProtectionMiddleware> _logger;
     private readonly TrustedOrigins _trustedOrigins;
+    private readonly IAntiforgery _antiforgery;
 
-    public CsrfProtectionMiddleware(RequestDelegate next, ILogger<CsrfProtectionMiddleware> logger, TrustedOrigins trustedOrigins)
+    public CsrfProtectionMiddleware(
+        RequestDelegate next,
+        ILogger<CsrfProtectionMiddleware> logger,
+        TrustedOrigins trustedOrigins,
+        IAntiforgery antiforgery)
     {
         _next = next;
         _logger = logger;
         _trustedOrigins = trustedOrigins;
+        _antiforgery = antiforgery;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (IsSafeMethod(context.Request.Method) || IsAllowed(context.Request))
+        if (IsSafeMethod(context.Request.Method))
         {
             await _next(context);
             return;
         }
 
-        _logger.LogWarning(
-            "[CSRF] Blocked cross-site {Method} {Path} (Origin: {Origin}, Sec-Fetch-Site: {FetchSite})",
-            context.Request.Method,
-            context.Request.Path,
-            context.Request.Headers.Origin.ToString(),
-            context.Request.Headers["Sec-Fetch-Site"].ToString());
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        await context.Response.WriteAsJsonAsync(new { message = "Cross-site request rejected." });
+        if (!IsAllowed(context.Request))
+        {
+            _logger.LogWarning(
+                "[CSRF] Blocked cross-site {Method} {Path} (Origin: {Origin}, Sec-Fetch-Site: {FetchSite})",
+                context.Request.Method,
+                context.Request.Path,
+                context.Request.Headers.Origin.ToString(),
+                context.Request.Headers["Sec-Fetch-Site"].ToString());
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { message = "Cross-site request rejected." });
+            return;
+        }
+
+        if (HasBrowserRequestMetadata(context.Request))
+        {
+            try
+            {
+                await _antiforgery.ValidateRequestAsync(context);
+            }
+            catch (AntiforgeryValidationException)
+            {
+                _logger.LogWarning("[CSRF] Blocked request without a valid antiforgery token: {Method} {Path}", context.Request.Method, context.Request.Path);
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsJsonAsync(new { message = "A valid CSRF token is required." });
+                return;
+            }
+        }
+
+        await _next(context);
     }
 
     private bool IsAllowed(HttpRequest request)
@@ -75,4 +104,8 @@ public class CsrfProtectionMiddleware
 
     private static bool IsSafeMethod(string method) =>
         HttpMethods.IsGet(method) || HttpMethods.IsHead(method) || HttpMethods.IsOptions(method) || HttpMethods.IsTrace(method);
+
+    private static bool HasBrowserRequestMetadata(HttpRequest request) =>
+        !string.IsNullOrEmpty(request.Headers.Origin) ||
+        !string.IsNullOrEmpty(request.Headers["Sec-Fetch-Site"]);
 }

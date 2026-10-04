@@ -24,10 +24,29 @@ public class SecurityHeadersTests : IClassFixture<WebApplicationFactory<Program>
     private async Task<HttpResponseMessage> SendLoginAsync(HttpMethod method, params (string Name, string Value)[] headers)
     {
         var client = _factory.CreateClient();
+        return await SendLoginAsync(client, method, headers);
+    }
+
+    private static async Task<HttpResponseMessage> SendLoginAsync(HttpClient client, HttpMethod method, params (string Name, string Value)[] headers)
+    {
         using var request = new HttpRequestMessage(method, "/api/auth/login") { Content = JsonContent.Create(InvalidLogin()) };
         foreach (var (name, value) in headers) request.Headers.TryAddWithoutValidation(name, value);
         return await client.SendAsync(request);
     }
+
+    private async Task<(HttpClient Client, string RequestToken)> GetCsrfTokenAsync()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        var response = await client.GetAsync("/api/csrf/token");
+        response.EnsureSuccessStatusCode();
+        var token = await response.Content.ReadFromJsonAsync<CsrfTokenResponse>();
+        Assert.NotNull(token?.RequestToken);
+        Assert.Contains(response.Headers.GetValues("Set-Cookie"), value => value.Contains("ChessWeb.Antiforgery", StringComparison.Ordinal));
+        Assert.Contains("no-store", response.Headers.CacheControl?.ToString());
+        return (client, token.RequestToken);
+    }
+
+    private sealed record CsrfTokenResponse(string RequestToken);
 
     [Theory]
     [InlineData("/api/articles")]
@@ -91,11 +110,78 @@ public class SecurityHeadersTests : IClassFixture<WebApplicationFactory<Program>
     [InlineData(null, null)]
     public async Task TrustedUnsafeRequest_ReachesTheApplication(string? fetchSite, string? origin)
     {
+        var (client, requestToken) = await GetCsrfTokenAsync();
         var headers = new List<(string, string)>();
         if (fetchSite != null) headers.Add(("Sec-Fetch-Site", fetchSite));
         if (origin != null) headers.Add(("Origin", origin));
+        headers.Add(("X-CSRF-TOKEN", requestToken));
 
-        var response = await PostLoginAsync(headers.ToArray());
+        var response = await SendLoginAsync(client, HttpMethod.Post, headers.ToArray());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BrowserUnsafeRequest_RequiresValidCsrfToken(bool includeToken)
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+        var headers = new List<(string, string)> { ("Origin", "http://localhost") };
+        if (includeToken)
+        {
+            var tokenResponse = await client.GetFromJsonAsync<CsrfTokenResponse>("/api/csrf/token");
+            Assert.NotNull(tokenResponse?.RequestToken);
+            headers.Add(("X-CSRF-TOKEN", tokenResponse.RequestToken));
+        }
+
+        var response = await SendLoginAsync(client, HttpMethod.Post, headers.ToArray());
+
+        Assert.Equal(includeToken ? HttpStatusCode.Unauthorized : HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BrowserUnsafeRequest_RejectsTamperedCsrfToken()
+    {
+        var (client, _) = await GetCsrfTokenAsync();
+
+        var response = await SendLoginAsync(
+            client,
+            HttpMethod.Post,
+            ("Origin", "http://localhost"),
+            ("X-CSRF-TOKEN", "tampered-token"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AntiforgeryCookie_IsHttpOnlyAndSameSiteInDevelopment()
+    {
+        var response = await _factory.CreateClient().GetAsync("/api/csrf/token");
+        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=lax", cookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AllowlistedOrigin_ReceivesCredentialedCorsHeaders()
+    {
+        var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/csrf/token");
+        request.Headers.TryAddWithoutValidation("Origin", "http://localhost:3000");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal("http://localhost:3000", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+        Assert.Equal("true", response.Headers.GetValues("Access-Control-Allow-Credentials").Single());
+    }
+
+    [Fact]
+    public async Task NonBrowserUnsafeRequest_DoesNotRequireCsrfToken()
+    {
+        var response = await PostLoginAsync();
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }

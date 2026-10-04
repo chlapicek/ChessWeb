@@ -8,6 +8,7 @@ using ChessWeb.Middleware;
 using ChessWeb.Services;
 using ChessWeb.Services.Uploads;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -111,6 +112,18 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.Cookie.Name = "ChessWeb.Antiforgery";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.Path = "/";
+    options.Cookie.SameSite = builder.Environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.None;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
+});
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireAdmin", policy => policy.RequireRole(Roles.Admin));
@@ -152,7 +165,7 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = uploadPermitsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 
-// 5. CORS (bearer tokens only, so no credentials are allowed cross-origin). Production is same-origin via nginx.
+// 5. CORS (JWT auth remains explicit; antiforgery cookies are allowed only for configured frontend origins).
 var trustedOrigins = new TrustedOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? []);
 builder.Services.AddSingleton(trustedOrigins);
 builder.Services.AddCors(options =>
@@ -161,7 +174,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(trustedOrigins.Origins.ToArray())
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -205,6 +219,13 @@ app.UseMiddleware<CsrfProtectionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+
+app.MapGet("/api/csrf/token", (HttpContext context, IAntiforgery antiforgery) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    var tokens = antiforgery.GetAndStoreTokens(context);
+    return Results.Ok(new { requestToken = tokens.RequestToken });
+});
 
 app.MapControllers();
 
