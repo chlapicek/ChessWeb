@@ -74,6 +74,14 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
+# Local application data and generated reports
+/src/backend/App_Data/
+/src/frontend/test-results/
+/src/frontend/build_out.txt
+/build-report.txt
+/test-report.txt
+/package-lock.json
+
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 

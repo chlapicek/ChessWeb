@@ -1,5 +1,6 @@
 <Solution>
-  <Folder Name="/src/" />
+  <Folder Name="/src/">
+    <Project Path="src/backend/ChessWeb.csproj" />
+  </Folder>
   <Folder Name="/tests/" />
-  <Project Path="ChessWeb.csproj" />
 </Solution>

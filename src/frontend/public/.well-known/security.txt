@@ -1,0 +1,5 @@
+# Replace the placeholder email and origin with deployment-provided values.
+Contact: mailto:security@example.invalid
+Expires: 2027-01-01T00:00:00Z
+Canonical: https://example.invalid/.well-known/security.txt
+Preferred-Languages: en

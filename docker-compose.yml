@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     image: chessweb-frontend:dev
     ports:
-      - "0.0.0.0:3000:80"
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
 
@@ -17,28 +17,42 @@ services:
       context: ./src/backend
       dockerfile: Dockerfile
     image: chessweb-backend:dev
-    ports:
-      - "8080:8080"
     environment:
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Server=db,1433;Database=ChessWebDb;User Id=sa;Password=Your_strong_password1;
+      - FileStorage__Provider=Local
+      - FileStorage__BasePath=/var/lib/chessweb/uploads
+      - ConnectionStrings__DefaultConnection=Server=db,1433;Database=ChessWebDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD before starting Compose};TrustServerCertificate=True;
+      - Jwt__Key=${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY before starting Compose}
+      - ClamAv__Enabled=true
+      - ClamAv__Host=clamav
+    volumes:
+      - backend-uploads:/var/lib/chessweb/uploads
     depends_on:
-      - db
-
+      db:
+        condition: service_healthy
+      clamav:
+        # Uploads fail closed until the signature database has loaded (can take a few minutes on first start).
+        condition: service_started
+  clamav:
+    image: clamav/clamav:stable
+    environment:
+      - FRESHCLAM_CHECKS=24
+    volumes:
+      - clamav-db:/var/lib/clamav
   db:
     image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
       - ACCEPT_EULA=Y
-      - SA_PASSWORD=Your_strong_password1
-    ports:
-      - "1433:1433"
+      - SA_PASSWORD=${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD before starting Compose}
     volumes:
       - mssql-data:/var/opt/mssql
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$${SA_PASSWORD}\" -Q \"SELECT 1\" || exit 1"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${SA_PASSWORD}\" -Q \"SELECT 1\" || exit 1"]
       interval: 10s
       retries: 10
       timeout: 5s
 
 volumes:
+  backend-uploads:
+  clamav-db:
   mssql-data:
