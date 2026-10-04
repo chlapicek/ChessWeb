@@ -52,10 +52,10 @@ public class CsrfProtectionMiddleware
         {
             _logger.LogWarning(
                 "[CSRF] Blocked cross-site {Method} {Path} (Origin: {Origin}, Sec-Fetch-Site: {FetchSite})",
-                context.Request.Method,
-                context.Request.Path,
-                context.Request.Headers.Origin.ToString(),
-                context.Request.Headers["Sec-Fetch-Site"].ToString());
+                SanitizeForLog(context.Request.Method),
+                SanitizeForLog(context.Request.Path.ToString()),
+                SanitizeForLog(context.Request.Headers.Origin.ToString()),
+                SanitizeForLog(context.Request.Headers["Sec-Fetch-Site"].ToString()));
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new { message = "Cross-site request rejected." });
             return;
@@ -77,6 +77,18 @@ public class CsrfProtectionMiddleware
         }
 
         await _next(context);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        return value
+            .Replace("\r", string.Empty)
+            .Replace("\n", string.Empty);
     }
 
     private bool IsAllowed(HttpRequest request)
