@@ -69,7 +69,10 @@ public class CsrfProtectionMiddleware
             }
             catch (AntiforgeryValidationException)
             {
-                _logger.LogWarning("[CSRF] Blocked request without a valid antiforgery token: {Method} {Path}", context.Request.Method, context.Request.Path);
+                _logger.LogWarning(
+                    "[CSRF] Blocked request without a valid antiforgery token: {Method} {Path}",
+                    SanitizeForLog(context.Request.Method),
+                    SanitizeForLog(context.Request.Path.ToString()));
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
                 await context.Response.WriteAsJsonAsync(new { message = "A valid CSRF token is required." });
                 return;
