@@ -21,6 +21,17 @@ public class RequestLoggingMiddleware
             return string.Empty;
         }
 
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        var sanitizedMethod = SanitizeForLog(request.Method);
+        }
+
         return value.Replace("\r", "").Replace("\n", "");
     }
 
@@ -30,7 +41,7 @@ public class RequestLoggingMiddleware
         var request = context.Request;
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
         var sanitizedPath = SanitizeForLog(request.Path.ToString());
-
+                sanitizedMethod,
         try
         {
             await _next(context);
@@ -44,7 +55,7 @@ public class RequestLoggingMiddleware
                 request.Method,
                 sanitizedPath,
                 statusCode,
-                stopwatch.ElapsedMilliseconds,
+                sanitizedMethod,
                 userId,
                 ip
             );
