@@ -14,6 +14,11 @@ public class RequestLoggingMiddleware
         _logger = logger;
     }
 
+    private static string SanitizeForLog(string value)
+    {
+        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -27,27 +32,34 @@ public class RequestLoggingMiddleware
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
+            var methodForLog = SanitizeForLog(request.Method);
+            var pathForLog = SanitizeForLog(request.Path.ToString());
+            var userIdForLog = SanitizeForLog(userId);
+            var ipForLog = SanitizeForLog(ip);
         {
             return string.Empty;
         var sanitizedMethod = SanitizeForLog(request.Method);
-        }
-
+                methodForLog,
+                pathForLog,
         return value.Replace("\r", "").Replace("\n", "");
     }
-
-    public async Task InvokeAsync(HttpContext context)
+                userIdForLog,
+                ipForLog
     {
         var stopwatch = Stopwatch.StartNew();
         var request = context.Request;
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
         var sanitizedPath = SanitizeForLog(request.Path.ToString());
+            var methodForLog = SanitizeForLog(request.Method);
+            var pathForLog = SanitizeForLog(request.Path.ToString());
+            var ipForLog = SanitizeForLog(ip);
                 sanitizedMethod,
         try
         {
-            await _next(context);
-            stopwatch.Stop();
+                methodForLog,
+                pathForLog,
 
-            var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Anonymous";
+                ipForLog
             var statusCode = context.Response.StatusCode;
 
             _logger.LogInformation(
