@@ -13,7 +13,7 @@ const LOG_LEVELS = ['Verbose', 'Debug', 'Information', 'Warning', 'Error', 'Fata
 
 export const AdminView: React.FC = () => {
   const { t } = useTranslation();
-  const { user, isAdmin, hasRole } = useAuth();
+  const { isAdmin, hasRole } = useAuth();
   const isSuperAdmin = hasRole('SuperAdmin');
   const [users, setUsers] = useState<User[]>([]);
   const [userSearch, setUserSearch] = useState('');
@@ -26,7 +26,6 @@ export const AdminView: React.FC = () => {
 
   const [feeds, setFeeds] = useState<CalendarFeed[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // New Feed state
   const [feedName, setFeedName] = useState('');
@@ -53,7 +52,6 @@ export const AdminView: React.FC = () => {
 
 
   const fetchData = async () => {
-    setLoading(true);
     try {
       const [usersRes, feedsRes, partnersRes] = await Promise.all([
         apiClient.get<User[]>('/auth/users'),
@@ -65,8 +63,6 @@ export const AdminView: React.FC = () => {
       setPartners(partnersRes.data);
     } catch (err) {
       console.error('Failed to load admin data', err);
-    } finally {
-      setLoading(false);
     }
   };
 

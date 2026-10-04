@@ -113,8 +113,6 @@ export const BoardEditor: React.FC<BoardEditorProps> = ({ onLoadPosition }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [armedPiece]);
 
-  const spareWidth = Math.max(24, Math.floor(boardWidth / 8));
-
   const armPiece = (piece: SparePieceCode, modifiers: { shiftKey: boolean; ctrlKey: boolean }) => {
     setArmedPiece((previous) => {
       if (previous === piece) return null;
