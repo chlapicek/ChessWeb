@@ -1,11 +1,15 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Chess } from 'chess.js';
 import { ThemeProvider } from '../context/ThemeContext';
 import { ChessViewer, formatMoveLabel, formatMoveNumber, type ChessViewerState, type MainlineMove, type ViewerGame } from '../components/ChessViewer';
 import { describeGames, GameCollectionPanel } from '../components/GameCollectionPanel';
 import i18n from '../i18n';
+import { addTreeMove, parsePgnTree, serializePgnTree, type BranchMove } from '../chess/pgnTree';
+import ArticleEditorModal from '../components/articles/ArticleEditorModal';
+
+vi.mock('../services/apiClient', () => ({ apiClient: { get: vi.fn(async () => ({ data: [] })) } }));
 
 const boardMock = vi.hoisted(() => ({ nextDrop: ['g1', 'f3'] as [string, string] }));
 
@@ -58,7 +62,7 @@ describe('ChessViewer controlled API', () => {
     const onStateChange = vi.fn();
     render(<ThemeProvider><ChessViewer pgn="1. e4 e5 2. Nf3 *" mode="analysis" onPgnChange={onPgnChange} onStateChange={onStateChange} /></ThemeProvider>);
 
-    fireEvent.click(screen.getByRole('button', { name: '1. e5' }));
+    fireEvent.click(screen.getByRole('button', { name: '1... e5' }));
     drop('g1', 'g3');
     expect(screen.queryByText(i18n.t('chessboard.interactiveMode'))).not.toBeInTheDocument();
 
@@ -67,15 +71,16 @@ describe('ChessViewer controlled API', () => {
 
     expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter('e4', 'e5', 'Nc3', 'Nc6'));
     expect(screen.getByText(i18n.t('chessboard.interactiveMode'))).toBeInTheDocument();
-    expect(screen.getByText('2. Nc3 Nc6')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2. Nc3' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2... Nc6' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '2. Nf3' })).toBeInTheDocument();
     expect(onPgnChange).not.toHaveBeenCalled();
-    expect(lastState(onStateChange)).toMatchObject({ gameKey: 'p0', ply: 2, isAnalyzing: true, fen: fenAfter('e4', 'e5', 'Nc3', 'Nc6') });
+    expect(lastState(onStateChange)).toMatchObject({ gameKey: 'p0', ply: 4, nodePath: [0, 0, 1, 0], isAnalyzing: true, fen: fenAfter('e4', 'e5', 'Nc3', 'Nc6') });
 
     fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.resumeGameLine') }));
 
     expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter('e4', 'e5'));
-    expect(screen.getByRole('button', { name: '1. e5' })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('button', { name: '1... e5' })).toHaveAttribute('aria-current', 'step');
     expect(lastState(onStateChange)).toMatchObject({ ply: 2, san: 'e5', isAnalyzing: false, moveNumberLabel: '1...' });
   });
 
@@ -105,8 +110,8 @@ describe('ChessViewer controlled API', () => {
     );
     const { rerender } = render(renderViewer({ gameKey: 'b', ply: 2, nonce: 1 }));
 
-    expect(lastState(onStateChange)).toEqual({ gameKey: 'b', ply: 2, san: 'd5', fen: fenAfter('d4', 'd5'), moveNumberLabel: '1...', isAnalyzing: false, atMainlineEnd: false });
-    expect(screen.getByRole('button', { name: '1. d5' })).toHaveAttribute('aria-current', 'step');
+    expect(lastState(onStateChange)).toEqual({ gameKey: 'b', ply: 2, nodePath: [0, 0], isMainline: true, san: 'd5', fen: fenAfter('d4', 'd5'), moveNumberLabel: '1...', isAnalyzing: false, atMainlineEnd: false });
+    expect(screen.getByRole('button', { name: '1... d5' })).toHaveAttribute('aria-current', 'step');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
     rerender(renderViewer({ gameKey: 'a', ply: 1, nonce: 2 }));
@@ -174,11 +179,209 @@ describe('ChessViewer controlled API', () => {
       expect(onMainlineMove).not.toHaveBeenCalled();
       expect(screen.getByText(i18n.t('chessboard.interactiveMode'))).toBeInTheDocument();
 
+      fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.resumeGameLine') }));
       fireEvent.keyDown(document, { key: 'ArrowDown' });
       drop('g1', 'f3');
       expect(onMainlineMove).toHaveBeenCalledTimes(1);
       expect(screen.getByText(i18n.t('chessboard.interactiveMode'))).toBeInTheDocument();
     });
+  });
+
+  it('selects imported alternatives, remembers ancestor choices and returns to the replacement mainline move', () => {
+    const state = vi.fn();
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5 2. Nf3 (2. Nc3)) 2. Nf3 *" onStateChange={state} /></ThemeProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '2. Nc3' }));
+    expect(lastState(state)).toMatchObject({ nodePath: [0, 1, 1], isMainline: false, fen: fenAfter('e4', 'c5', 'Nc3') });
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    expect(lastState(state).nodePath).toEqual([0, 1, 1]);
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.returnMainline') }));
+    expect(lastState(state).nodePath).toEqual([0, 0]);
+  });
+
+  it('existing drops only select; new alternatives keep the source and undo restores cursor and full PGN', () => {
+    const changed = vi.fn();
+    const state = vi.fn();
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 2. Nf3 *" onPgnChange={changed} onStateChange={state} /></ThemeProvider>);
+    drop('e2', 'e4');
+    expect(changed).not.toHaveBeenCalled();
+    drop('c7', 'c5');
+    expect(lastState(state).nodePath).toEqual([0, 1]);
+    expect(changed).toHaveBeenCalledWith(expect.stringContaining('(1... c5)'));
+    expect(screen.getByRole('button', { name: '1... e5' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') }));
+    expect(lastState(state).nodePath).toEqual([0]);
+    expect(changed).toHaveBeenLastCalledWith('1. e4 e5 2. Nf3 *');
+    expect(screen.queryByRole('button', { name: '1... c5' })).not.toBeInTheDocument();
+  });
+
+  it('retains accepted branches through delayed sources and lets explicit reload override them', () => {
+    const accepted: BranchMove[] = [];
+    const state = vi.fn();
+    const record = (move: BranchMove) => { accepted.push(move); return true; };
+    const view = (source: string, reloadToken = 0) => <ThemeProvider><ChessViewer games={[{ key: 'p0', pgn: source }]} mode="analysis" onBranchMove={record} onStateChange={state} reloadToken={reloadToken} /></ThemeProvider>;
+    const { rerender } = render(view('1. e4 e5 *'));
+    fireEvent.click(screen.getByRole('button', { name: '1. e4' }));
+    drop('c7', 'c5');
+    expect(accepted[0]).toMatchObject({ parentPath: [0], nodePath: [0, 1], expectedSource: '1. e4 e5 *', expectedParentFen: fenAfter('e4') });
+    drop('g1', 'f3');
+    rerender(view(accepted[0].pgn));
+    expect(lastState(state).nodePath).toEqual([0, 1, 0]);
+    expect(screen.getByRole('button', { name: '2. Nf3' })).toHaveAttribute('aria-current', 'step');
+    rerender(view(accepted[1].pgn));
+    expect(lastState(state)).toMatchObject({ nodePath: [0, 1, 0], isAnalyzing: false, isMainline: false });
+    rerender(view('1. e4 e5 *', 1));
+    expect(lastState(state).nodePath).toEqual([]);
+    expect(screen.queryByRole('button', { name: '1... c5' })).not.toBeInTheDocument();
+  });
+
+  it('a rejected article branch changes neither cursor nor tree and emits no PGN', () => {
+    const state = vi.fn();
+    const changed = vi.fn();
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 *" mode="analysis" onBranchMove={() => false} onStateChange={state} onPgnChange={changed} /></ThemeProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '1. e4' }));
+    drop('c7', 'c5');
+    expect(lastState(state)).toMatchObject({ nodePath: [0], isAnalyzing: false });
+    expect(screen.queryByRole('button', { name: '1... c5' })).not.toBeInTheDocument();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('refuses edit writes and undo without changing the board or consuming snapshots', () => {
+    let accepts = false;
+    const changed = vi.fn(() => accepts);
+    render(<ThemeProvider><ChessViewer pgn="*" onPgnChange={changed} /></ThemeProvider>);
+    drop('e2', 'e4');
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter());
+    expect(screen.queryByRole('button', { name: '1. e4' })).not.toBeInTheDocument();
+    accepts = true;
+    drop('e2', 'e4');
+    accepts = false;
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') }));
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter('e4'));
+    expect(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') })).toBeEnabled();
+    accepts = true;
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') }));
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter());
+  });
+
+  it('invalidates edit undo when an external replacement arrives without a reload token', () => {
+    const changed = vi.fn();
+    const view = (source: string) => <ThemeProvider><ChessViewer pgn={source} onPgnChange={changed} /></ThemeProvider>;
+    const { rerender } = render(view('*'));
+    drop('e2', 'e4');
+    rerender(view('1. d4 *'));
+    expect(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') }));
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '1. d4' })).toBeInTheDocument();
+  });
+
+  it('retires sequential deferred acknowledgements so an old source becomes authoritative again', () => {
+    const outputs: string[] = [];
+    const view = (source: string, reloadToken = 0) => <ThemeProvider><ChessViewer pgn={source} reloadToken={reloadToken} onPgnChange={(value) => { outputs.push(value); }} /></ThemeProvider>;
+    const { rerender } = render(view('*'));
+    drop('e2', 'e4'); drop('e7', 'e5'); drop('g1', 'f3');
+    rerender(view(outputs[0]));
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter('e4', 'e5', 'Nf3'));
+    rerender(view(outputs[1]));
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter('e4', 'e5', 'Nf3'));
+    rerender(view(outputs[2]));
+    expect(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') })).toBeEnabled();
+    rerender(view(outputs[0]));
+    expect(screen.queryByRole('button', { name: '2. Nf3' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') })).toBeDisabled();
+    rerender(view('', 1));
+    expect(screen.queryByRole('button', { name: '1. e4' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter());
+  });
+
+  it('roundtrips closing braces in semicolon comments through serialization and edits', () => {
+    const tree = parsePgnTree('1. e4 ; note }\ne5 *');
+    const serialized = serializePgnTree(tree);
+    expect(serialized).toContain('\n; note }\n');
+    expect(parsePgnTree(serialized).root).toEqual(tree.root);
+    const edited = addTreeMove(tree, [0], 'c5');
+    expect(parsePgnTree(serializePgnTree(edited.tree)).root).toEqual(edited.tree.root);
+  });
+
+  it('accepts controlled sources and games list additions with closing-brace comments', () => {
+    const changed = vi.fn();
+    const view = (games: ViewerGame[]) => <ThemeProvider><ChessViewer games={games} onPgnChange={changed} /></ThemeProvider>;
+    const source = '1. e4 ; note }\ne5 *';
+    const { rerender } = render(view([{ key: 'a', pgn: '*' }]));
+    rerender(view([{ key: 'a', pgn: source }]));
+    expect(screen.getByText('note }')).toBeInTheDocument();
+    rerender(view([{ key: 'a', pgn: source }, { key: 'b', pgn: source }]));
+    expect(screen.getByRole('combobox')).toHaveValue('0');
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '1' } });
+    expect(screen.getByText('note }')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '1. e4' }));
+    drop('c7', 'c5');
+    const output = changed.mock.calls.at(-1)?.[0] as string;
+    expect(parsePgnTree(output).root.children[0].comments).toEqual(['note }']);
+    rerender(view([{ key: 'a', pgn: source }, { key: 'b', pgn: output }]));
+    expect(screen.getByRole('button', { name: '1... c5' })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('note }')).toBeInTheDocument();
+  });
+
+  it('keeps undo authoritative when an older addition acknowledgement arrives first', () => {
+    const outputs: string[] = [];
+    const view = (source: string) => <ThemeProvider><ChessViewer pgn={source} onPgnChange={(value) => { outputs.push(value); }} /></ThemeProvider>;
+    const { rerender } = render(view('*'));
+    drop('e2', 'e4');
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') }));
+    expect(outputs).toEqual(['1. e4 *', '*']);
+    rerender(view(outputs[0]));
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter());
+    expect(screen.queryByRole('button', { name: '1. e4' })).not.toBeInTheDocument();
+    rerender(view(outputs[1]));
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter());
+    drop('d2', 'd4');
+    expect(outputs.at(-1)).toBe('1. d4 *');
+    rerender(view(outputs[0]));
+    expect(screen.getByRole('button', { name: '1. e4' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') })).toBeDisabled();
+  });
+
+  it('retires acknowledged additions and undos across sequential edit cycles', () => {
+    const outputs: string[] = [];
+    const view = (source: string) => <ThemeProvider><ChessViewer pgn={source} onPgnChange={(value) => { outputs.push(value); }} /></ThemeProvider>;
+    const { rerender } = render(view('*'));
+    for (const [from, to, san] of [['e2', 'e4', 'e4'], ['d2', 'd4', 'd4']]) {
+      drop(from, to);
+      rerender(view(outputs.at(-1)!));
+      expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter(san));
+      fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') }));
+      rerender(view(outputs.at(-1)!));
+      expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter());
+      expect(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') })).toBeDisabled();
+    }
+    expect(outputs).toEqual(['1. e4 *', '*', '1. d4 *', '*']);
+  });
+
+  it('article manual clear and revert reset recorded games and disable stale move insertion', async () => {
+    render(<ThemeProvider><ArticleEditorModal onClose={vi.fn()} onSaved={vi.fn()} /></ThemeProvider>);
+    const notation = screen.getByLabelText(i18n.t('articles.pgnNotation'));
+    const insertMove = screen.getByRole('button', { name: i18n.t('articles.insertMove') });
+    drop('e2', 'e4');
+    await waitFor(() => expect(notation).toHaveValue('1. e4 *'));
+    await waitFor(() => expect(insertMove).toBeEnabled());
+    fireEvent.change(notation, { target: { value: '' } });
+    await waitFor(() => expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter()));
+    expect(insertMove).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '1. e4' })).not.toBeInTheDocument();
+
+    fireEvent.change(notation, { target: { value: '1. d4 *' } });
+    await screen.findByRole('button', { name: '1. d4' });
+    drop('d2', 'd4'); drop('d7', 'd5');
+    await waitFor(() => expect(notation).toHaveValue('1. d4 1... d5 *'));
+    await waitFor(() => expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter('d4', 'd5')));
+    fireEvent.change(notation, { target: { value: '1. d4 *' } });
+    await waitFor(() => expect(screen.getByTestId('board')).toHaveAttribute('data-position', fenAfter()));
+    expect(insertMove).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '1... d5' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: i18n.t('articles.undoAddedMove') })).not.toBeInTheDocument();
   });
 });
 

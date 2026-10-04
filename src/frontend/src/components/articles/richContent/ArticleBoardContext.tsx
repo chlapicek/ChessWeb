@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useRef, useStat
 import { parsePgnGames, type ChessViewerState, type ViewerGame, type ViewerTarget } from '../../ChessViewer';
 import type { Attachment } from '../../../types';
 import { FEN_GAME_KEY, fenToViewerGame, isValidFen } from '../articleUtils';
+import type { NodePath } from '../../../chess/pgnTree';
 
 export interface BoardGameInfo {
   key: string;
@@ -17,7 +18,7 @@ export interface ArticleBoardContextValue {
   games: ViewerGame[];
   gameInfo: Record<string, BoardGameInfo>;
   attachments: Attachment[];
-  jumpTo: (gameKey: string, ply: number) => void;
+  jumpTo: (gameKey: string, ply: number, nodePath?: NodePath) => void;
   showFen: (fen: string) => void;
   selectGame: (gameKey: string) => void;
 }
@@ -56,7 +57,7 @@ export const describeBoardGames = (games: ViewerGame[]): Record<string, BoardGam
 interface ArticleBoardProviderProps {
   games: ViewerGame[];
   attachments: Attachment[];
-  jumpTo: (gameKey: string, ply: number) => void;
+  jumpTo: (gameKey: string, ply: number, nodePath?: NodePath) => void;
   showFen: (fen: string) => void;
   selectGame: (gameKey: string) => void;
   children: React.ReactNode;
@@ -85,9 +86,9 @@ export const useBoardController = (baseGames: ViewerGame[], fenLabel: string, on
     return [...baseGames.filter((game) => game.key !== FEN_GAME_KEY), fenToViewerGame(transientFen, fenLabel)];
   }, [baseGames, transientFen, fenLabel]);
 
-  const jumpTo = useCallback((gameKey: string, ply: number) => {
+  const jumpTo = useCallback((gameKey: string, ply: number, nodePath?: NodePath) => {
     nonce.current += 1;
-    setTarget({ gameKey, ply, nonce: nonce.current });
+    setTarget({ gameKey, ply, nodePath, nonce: nonce.current });
     onNavigateRef.current?.();
   }, []);
   const selectGame = useCallback((gameKey: string) => jumpTo(gameKey, 0), [jumpTo]);

@@ -1,13 +1,14 @@
-import React, { useDeferredValue, useEffect, useId, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditor } from '@tiptap/react';
 import { AlertCircle, Crosshair, LayoutGrid, Swords, Undo2, X } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
 import type { Article, Attachment, GameCollectionDetail, GameCollectionGame, GameCollectionSummary } from '../../types';
-import { ChessViewer, formatMoveLabel, parsePgnGames, type MainlineMove } from '../ChessViewer';
+import { ChessViewer, formatMoveLabel, parsePgnGames } from '../ChessViewer';
+import type { BranchMove, NodePath } from '../../chess/pgnTree';
 import { GameCollectionPanel, describeGames } from '../GameCollectionPanel';
 import { ArticleEditor } from './ArticleEditor';
-import { apiErrorMessage, buildArticleGames, canRecordMoveInto, isPgnGameKey, isValidFen, recordMoveInPgn } from './articleUtils';
+import { apiErrorMessage, buildArticleGames, canRecordMoveInto, isPgnGameKey, isValidFen, isSupportedPgn, recordBranchInPgn } from './articleUtils';
 import { ArticleBoardProvider, useBoardController } from './richContent/ArticleBoardContext';
 import { createRichExtensions } from './richContent/extensions';
 import { MAX_RICH_CONTENT_LENGTH, isArticleGameKey, parseRichDoc, plainTextToDoc, sanitizeRichDoc, type RichDoc } from './richContent/richDoc';
@@ -45,7 +46,11 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [contentLength, setContentLength] = useState(0);
-  const [lastRecorded, setLastRecorded] = useState<{ before: string; after: string; gameKey: string; ply: number } | null>(null);
+  const [recordedMoves, setRecordedMoves] = useState<Array<{ before: string; after: string; gameKey: string; parentPath: NodePath }>>([]);
+  const lastRecorded = recordedMoves.at(-1);
+  const pgnRef = useRef(pgn);
+  pgnRef.current = pgn;
+  const [boardReload, setBoardReload] = useState(0);
   const [moveAnnouncement, setMoveAnnouncement] = useState('');
 
   const extensions = useMemo(() => createRichExtensions(), []);
@@ -88,7 +93,8 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
   }, [collections, article?.collection]);
 
   const fenLabel = t('articles.shownPosition');
-  const deferredPgn = useDeferredValue(pgn);
+  const deferredSource = useDeferredValue(useMemo(() => ({ pgn, revision: boardReload }), [pgn, boardReload]));
+  const deferredPgn = deferredSource.pgn;
   const baseGames = useMemo(() => buildArticleGames(deferredPgn, collectionGames, fen, fenLabel), [deferredPgn, collectionGames, fen, fenLabel]);
   const board = useBoardController(baseGames, fenLabel);
   const gameEntries = useMemo(() => describeGames(board.games), [board.games]);
@@ -97,7 +103,7 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
 
   const state = board.boardState;
   const currentGameKey = isArticleGameKey(state?.gameKey) ? state?.gameKey : undefined;
-  const canInsertMove = !!currentGameKey && !!state && state.ply > 0 && !state.isAnalyzing && !!state.san;
+  const canInsertMove = deferredPgn === pgn && !!currentGameKey && !!state && state.ply > 0 && state.isMainline && !state.isAnalyzing && !!state.san;
   const positionFen = state?.fen ?? (isValidFen(fen) ? fen.trim() : undefined);
 
   const insert = (content: Record<string, unknown>) => editor?.chain().focus().insertContent(content).run();
@@ -113,29 +119,35 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
     if (canInsertMove && state?.san) insert({ type: 'moveRef', attrs: { gameKey: currentGameKey, ply: state.ply, san: state.san.slice(0, 20) } });
   };
 
-  const recordsMoves = state ? state.atMainlineEnd && canRecordMoveInto(state.gameKey, pgn) : board.games.length === 0;
+  const recordsMoves = state ? canRecordMoveInto(state.gameKey, pgn) && (state.gameKey !== 'fen' || isValidFen(fen) && parsePgnGames(board.games.find((game) => game.key === 'fen')?.pgn ?? '')[0]?.startFen === fen.trim()) : board.games.length === 0;
 
-  const recordMainlineMove = ({ gameKey, ply, san }: MainlineMove) => {
-    const startFen = parsePgnGames(board.games.find((game) => game.key === gameKey)?.pgn ?? '')[0]?.startFen;
-    const updated = canRecordMoveInto(gameKey, pgn) ? recordMoveInPgn(pgn, gameKey, san, ply, startFen) : null;
-    if (!updated || updated.length > MAX_PGN_LENGTH) {
-      if (canRecordMoveInto(gameKey, pgn)) setMoveAnnouncement(t('articles.moveNotAddedToPgn'));
+  const recordBranchMove = (move: BranchMove) => {
+    const { gameKey, san } = move;
+    const before = pgnRef.current;
+    if (!canRecordMoveInto(gameKey, before)) return undefined;
+    const startFen = parsePgnGames(move.expectedSource)[0]?.startFen;
+    if (gameKey === 'fen' && (!isValidFen(fen) || startFen !== fen.trim())) return undefined;
+    const updated = recordBranchInPgn(before, move, MAX_PGN_LENGTH);
+    if (updated === null) {
+      setMoveAnnouncement(t('articles.moveNotAddedToPgn'));
       return false;
     }
     const recordedKey = gameKey && isPgnGameKey(gameKey) ? gameKey : 'p0';
+    pgnRef.current = updated;
     setPgn(updated);
-    setLastRecorded({ before: pgn, after: updated, gameKey: recordedKey, ply });
-    setMoveAnnouncement(t('articles.moveAddedToPgn', { move: formatMoveLabel(ply, san, undefined, startFen) }));
-    // A new game gets a new key, so the board has to be pointed at it.
-    if (recordedKey !== gameKey) board.jumpTo(recordedKey, ply);
+    setRecordedMoves((items) => [...items, { before, after: updated, gameKey: before ? recordedKey : gameKey ?? 'p0', parentPath: move.parentPath }]);
+    setMoveAnnouncement(t('articles.moveAddedToPgn', { move: formatMoveLabel(move.nodePath.length, san, undefined, startFen) }));
+    if (recordedKey !== gameKey) board.jumpTo(recordedKey, move.nodePath.length, move.nodePath);
     return true;
   };
 
   const undoRecordedMove = () => {
     if (!lastRecorded) return;
+    pgnRef.current = lastRecorded.before;
     setPgn(lastRecorded.before);
-    if (lastRecorded.before) board.jumpTo(lastRecorded.gameKey, lastRecorded.ply - 1);
-    setLastRecorded(null);
+    setBoardReload((version) => version + 1);
+    board.jumpTo(lastRecorded.gameKey, lastRecorded.parentPath.length, lastRecorded.parentPath);
+    setRecordedMoves((items) => items.slice(0, -1));
     setMoveAnnouncement('');
   };
 
@@ -154,6 +166,10 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
     }
     if (fen.trim() && !isValidFen(fen)) {
       setError(t('articles.invalidFen'));
+      return;
+    }
+    if (pgn.length > MAX_PGN_LENGTH || !isSupportedPgn(pgn)) {
+      setError(t('chessboard.invalidPgn'));
       return;
     }
 
@@ -261,7 +277,7 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
                   rows={4}
                   maxLength={MAX_PGN_LENGTH}
                   value={pgn}
-                  onChange={(e) => setPgn(e.target.value)}
+                  onChange={(e) => { pgnRef.current = e.target.value; setPgn(e.target.value); setRecordedMoves([]); setBoardReload((version) => version + 1); setMoveAnnouncement(''); }}
                   placeholder="1. e4 e5 2. Nf3 Nc6..."
                   className={`${inputClass} font-mono text-xs`}
                 />
@@ -304,7 +320,8 @@ const ArticleEditorModal: React.FC<ArticleEditorModalProps> = ({ article, onClos
                   mode="analysis"
                   hideGameSelector
                   boardWidth={340}
-                  onMainlineMove={recordMainlineMove}
+                  onBranchMove={recordBranchMove}
+                  reloadToken={deferredSource.revision}
                 />
                 <p id={`${formId}-board-mode`} className="text-[11px] text-slate-500 dark:text-slate-400">
                   {t(recordsMoves ? 'articles.boardRecordsMoves' : 'articles.boardAnalysisOnly')}

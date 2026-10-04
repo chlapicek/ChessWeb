@@ -83,13 +83,13 @@ describe('ChessViewer PGN support', () => {
 		expect(screen.getByText('Good move.')).toBeInTheDocument();
 	});
 
-	it('pairs White and Black moves on the same notation row', () => {
+	it('labels White and Black moves correctly in notation', () => {
 		const target = document.createElement('div');
 		document.body.appendChild(target);
 		render(<ThemeProvider><ChessViewer pgn={'1. e4 { White note. } e5 { Black note. } *'} notationTarget={target} /></ThemeProvider>);
 
 		expect(screen.getByRole('button', { name: '1. e4' })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: '1. e5' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: '1... e5' })).toBeInTheDocument();
 		expect(screen.getByText('White note.')).toBeInTheDocument();
 		expect(screen.getByText('Black note.')).toBeInTheDocument();
 	});

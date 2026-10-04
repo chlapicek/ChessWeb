@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Download, RotateCcw, Save, FolderOpen, X, Trash2, FileDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -10,23 +10,10 @@ import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
 import { GameCollectionSummary, GameCollectionDetail } from '../types';
 import { useConfirm } from '../components/ConfirmDialog';
+import { isSupportedPgn } from '../components/articles/articleUtils';
+import { completePgnExport } from '../chess/pgnTree';
 
 const STARTER_PGN = `1. e4 e5 2. Nf3 Nc6 3. Bb5 a6`;
-
-const SEVEN_TAG_ROSTER_KEYS = ['Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result'];
-
-// Prepends placeholder Seven Tag Roster headers when a plain move-list has none, so the export is spec-valid PGN.
-const ensureSevenTagRoster = (pgnText: string): string => {
-  const trimmed = pgnText.trim();
-  if (!trimmed) return trimmed;
-  if (/^\s*\[[A-Za-z]+\s+"/m.test(trimmed)) return trimmed;
-  const resultMatch = trimmed.match(/(1-0|0-1|1\/2-1\/2|\*)\s*$/);
-  const result = resultMatch ? resultMatch[1] : '*';
-  const headerBlock = SEVEN_TAG_ROSTER_KEYS
-    .map((key) => `[${key} "${key === 'Date' ? '????.??.??' : key === 'Result' ? result : '?'}"]`)
-    .join('\n');
-  return `${headerBlock}\n\n${trimmed}`;
-};
 
 const sanitizeDownloadFileName = (name: string) => {
   const sanitized = name.replace(/[^a-zA-Z0-9-_ ]/g, '').trim();
@@ -38,6 +25,8 @@ export const BoardView: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const confirm = useConfirm();
   const [pgn, setPgn] = useState(STARTER_PGN);
+  const draftSource = useRef(STARTER_PGN);
+  const boardSource = useRef(STARTER_PGN);
   const [loadedPgn, setLoadedPgn] = useState<string | undefined>(STARTER_PGN);
   const [loadVersion, setLoadVersion] = useState(0);
   const [loadedFen, setLoadedFen] = useState<string | undefined>(undefined);
@@ -61,12 +50,16 @@ export const BoardView: React.FC = () => {
     event.preventDefault();
     setEngineArrows([]);
     setLoadedFen(undefined);
-    setLoadedPgn(pgn.trim());
+    draftSource.current = pgn.trim(); boardSource.current = pgn.trim();
+    setPgn(pgn.trim()); setLoadedPgn(pgn.trim());
     setLoadVersion((version) => version + 1);
   };
 
   const exportPgn = () => {
-    const file = new Blob([ensureSevenTagRoster(pgn)], { type: 'application/x-chess-pgn;charset=utf-8' });
+    let exported: string;
+    try { exported = completePgnExport(pgn); }
+    catch { toast.error(t('chessboard.invalidPgn')); return; }
+    const file = new Blob([exported], { type: 'application/x-chess-pgn;charset=utf-8' });
     const url = URL.createObjectURL(file);
     const link = document.createElement('a');
     link.href = url;
@@ -78,6 +71,7 @@ export const BoardView: React.FC = () => {
   const resetGame = () => {
     setEngineArrows([]);
     setLoadedFen(undefined);
+    draftSource.current = ''; boardSource.current = '';
     setPgn('');
     setLoadedPgn('');
     setLoadVersion((version) => version + 1);
@@ -85,8 +79,10 @@ export const BoardView: React.FC = () => {
 
   const loadPosition = (fen: string) => {
     setEngineArrows([]);
-    setLoadedPgn(undefined);
-    setLoadedFen(fen);
+    const source = `[SetUp "1"]\n[FEN "${fen}"]\n\n*`;
+    draftSource.current = source; boardSource.current = source;
+    setPgn(source); setLoadedPgn(source); setLoadedFen(undefined);
+    setLoadVersion((version) => version + 1);
     setActiveTab('pgn');
   };
 
@@ -111,6 +107,7 @@ export const BoardView: React.FC = () => {
 
   const handleSaveCollection = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!isSupportedPgn(pgn)) { setSaveError(t('chessboard.invalidPgn')); return; }
     const games = parsePgnGames(pgn).map((game) => ({ pgn: game.pgn, label: game.label }));
     if (games.length === 0) {
       setSaveError(t('board.collectionSaveNoGames'));
@@ -141,6 +138,7 @@ export const BoardView: React.FC = () => {
         .join('\n\n');
       setEngineArrows([]);
       setLoadedFen(undefined);
+      draftSource.current = combinedPgn; boardSource.current = combinedPgn;
       setPgn(combinedPgn);
       setLoadedPgn(combinedPgn);
       setLoadVersion((version) => version + 1);
@@ -299,7 +297,15 @@ export const BoardView: React.FC = () => {
               boardWidth={720}
               arrows={engineArrows}
               onPositionChange={setAnalysisFen}
-              onPgnChange={setPgn}
+              onPgnChange={(source) => {
+                if (draftSource.current !== boardSource.current) {
+                  toast.warning(t('chessboard.draftNotLoaded'));
+                  return false;
+                }
+                draftSource.current = source; boardSource.current = source;
+                setPgn(source); setLoadedPgn(source);
+                return true;
+              }}
               notationTarget={notationTarget}
               keyboardNavigationEnabled={activeTab === 'pgn'}
               reloadToken={loadVersion}
@@ -318,7 +324,7 @@ export const BoardView: React.FC = () => {
             <textarea
               id="pgn-notation"
               value={pgn}
-              onChange={(event) => setPgn(event.target.value)}
+              onChange={(event) => { draftSource.current = event.target.value; setPgn(event.target.value); }}
               rows={12}
               spellCheck={false}
               placeholder={t('board.placeholder')}

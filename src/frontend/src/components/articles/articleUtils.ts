@@ -2,6 +2,7 @@ import { validateFen } from 'chess.js';
 import { apiClient } from '../../services/apiClient';
 import { formatMoveNumber, parsePgnGames, type ViewerGame } from '../ChessViewer';
 import type { ArticleReactionType, GameCollectionGame } from '../../types';
+import { addTreeMove, nodeAt, parsePgnTree, replacePgnChunk, serializePgnTree, splitPgnChunks, type BranchMove } from '../../chess/pgnTree';
 
 export const REACTION_CONFIG: { type: ArticleReactionType; emoji: string; labelKey: string }[] = [
   { type: 0, emoji: '👍', labelKey: 'articles.reactionNames.like' },
@@ -90,6 +91,30 @@ export const recordMoveInPgn = (pgnText: string, gameKey: string | undefined, sa
 
   const created = `${startFen ? `${fenSetupHeaders(startFen)}\n\n` : ''}${formatMoveNumber(1, startFen)} ${san} *`;
   return sameMoves(parsePgnGames(created)[0]?.history ?? [], [san]) ? created : null;
+};
+
+export const recordBranchInPgn = (pgnText: string, move: BranchMove, maxLength = 15000): string | null => {
+  if (!canRecordMoveInto(move.gameKey, pgnText)) return null;
+  try {
+    const sourceTree = parsePgnTree(move.expectedSource);
+    if (nodeAt(sourceTree, move.parentPath)?.fen !== move.expectedParentFen) return null;
+    const addition = addTreeMove(sourceTree, move.parentPath, move.san);
+    if (!addition.added || JSON.stringify(addition.nodePath) !== JSON.stringify(move.nodePath)
+      || serializePgnTree(addition.tree) !== move.pgn) return null;
+    const gameIndex = Number(move.gameKey?.match(PGN_GAME_KEY)?.[1] ?? 0);
+    let updated: string | null;
+    if (pgnText.trim()) updated = replacePgnChunk(pgnText, gameIndex, move.expectedSource, move.pgn);
+    else {
+      if (gameIndex !== 0 || move.parentPath.length || sourceTree.root.children.length) return null;
+      updated = move.pgn;
+    }
+    return updated !== null && updated.length <= maxLength ? updated : null;
+  } catch { return null; }
+};
+
+export const isSupportedPgn = (pgn: string): boolean => {
+  try { splitPgnChunks(pgn).forEach((chunk) => parsePgnTree(chunk.pgn)); return true; }
+  catch { return false; }
 };
 
 export const fetchAttachmentBlob = async (attachmentId: string): Promise<Blob> => {

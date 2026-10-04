@@ -4,6 +4,7 @@ Full-stack chess web portal built with **ASP.NET Core (.NET 10)** and **React (T
 
 ## Features
 - 📰 **Articles & Game Analysis**: Public browsing with rich content, comments, reactions (👍, ❤️, ♟️, 💡, 🏆), owner editing, attachments, and embedded interactive chessboard (PGN/FEN).
+- **Nested PGN Variations**: Import, navigate and export complete move trees with comments, NAGs and FEN starts. Legal board moves append alternatives without replacing existing moves; undo removes only newly added moves. Article-owned PGN branches are editable, while published and linked games use temporary analysis. Studio edits can be exported or saved as a new collection, never automatically written back to a loaded collection.
 - 💬 **Community Forums**: Categorized discussions and game reviews with PGN embeds.
 - 📅 **Event Calendar**: Full month interactive grid & list view, recurring events (Daily, Weekly, Bi-Weekly, Monthly), and external iCalendar (`.ics`) / RSS synchronization.
 - 🏆 **Competitions Portal**:

@@ -1,4 +1,82 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { parsePgnTree } from '../../src/chess/pgnTree';
+
+for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 }]) {
+  test(`nested PGN import, navigation, drop, undo, export and reload at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/board');
+    const source = '[Event "Nested"]\n\n{ Opening } 1. e4 e5 (1... c5 $1 { Sicilian } 2. Nf3 (2. Nc3 { Nested note })) 2. Nf3 *';
+    const notation = page.locator('#pgn-notation');
+    await notation.fill(source);
+    await page.getByRole('button', { name: /import pgn|importovat pgn/i }).click();
+    await page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ }).click();
+    await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
+    const board = page.getByRole('region', { name: /chessboard\.|šachovnice\./i });
+    await board.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('button', { name: '1... c5', exact: true })).toHaveAttribute('aria-current', 'step');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
+    await page.getByRole('button', { name: /return to mainline|zpět na hlavní variantu/i }).click();
+    await expect(page.getByRole('button', { name: '1... e5', exact: true })).toHaveAttribute('aria-current', 'step');
+    const drag = async (from: string, to: string) => {
+      await board.scrollIntoViewIfNeeded();
+      const piece = board.locator(`[data-square="${from}"] [data-piece]`);
+      await expect(piece).toBeVisible();
+      const start = await piece.boundingBox();
+      const end = await board.locator(`[data-square="${to}"]`).boundingBox();
+      expect(start).not.toBeNull(); expect(end).not.toBeNull();
+      await page.mouse.move(start!.x + start!.width / 2, start!.y + start!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(end!.x + end!.width / 2, end!.y + end!.height / 2, { steps: 15 });
+      await page.mouse.up();
+    };
+    const draft = '1. d4 d5 *';
+    await notation.fill(draft);
+    await drag('b1', 'c3');
+    await expect(notation).toHaveValue(draft);
+    await expect(page.getByText(/import the edited pgn|importujte upravené pgn/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: '1... e5', exact: true })).toHaveAttribute('aria-current', 'step');
+    await expect(page.getByRole('button', { name: /undo added move|vrátit přidaný tah/i })).toBeDisabled();
+    await notation.fill(source);
+    await drag('b1', 'c3');
+    await expect(notation).toHaveValue(/e5.*\(.*c5[\s\S]*\(2\. Nc3\)/);
+    const added = await notation.inputValue();
+    await notation.fill(draft);
+    await page.getByRole('button', { name: /undo added move|vrátit přidaný tah/i }).click();
+    await expect(notation).toHaveValue(draft);
+    await expect(page.getByRole('button', { name: /undo added move|vrátit přidaný tah/i })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ }).last()).toHaveAttribute('aria-current', 'step');
+    await notation.fill(added);
+    await page.getByRole('button', { name: /undo added move|vrátit přidaný tah/i }).click();
+    await expect(notation).toHaveValue(source);
+    await expect(page.getByRole('button', { name: '1... e5', exact: true })).toHaveAttribute('aria-current', 'step');
+    await drag('b1', 'c3');
+    const working = await notation.inputValue();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: /export pgn|exportovat pgn/i }).click();
+    const download = await downloadPromise;
+    const exported = await readFile((await download.path())!, 'utf8');
+    expect(parsePgnTree(exported).root).toEqual(parsePgnTree(working).root);
+    expect(parsePgnTree(exported).headers).toMatchObject({ Event: 'Nested', Site: '?', Date: '????.??.??', Round: '?', White: '?', Black: '?', Result: '*' });
+    expect(exported).toContain('Nested note');
+    await notation.fill(exported);
+    await page.getByRole('button', { name: /import pgn|importovat pgn/i }).click();
+    await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveCount(2);
+    for (const panel of [board, notation.locator('..')]) {
+      const metrics = await panel.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, width: rect.width, scroll: element.scrollWidth, client: element.clientWidth, viewport: window.innerWidth };
+      });
+      expect(metrics.width).toBeGreaterThan(0);
+      expect(metrics.left).toBeGreaterThanOrEqual(0);
+      expect(metrics.right).toBeLessThanOrEqual(metrics.viewport);
+      expect(metrics.scroll).toBeLessThanOrEqual(metrics.client + 1);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`nested-${viewport.width}.png`), fullPage: true });
+  });
+}
 
 test.describe('public workflows', () => {
   test('imports multiple PGN games, switches between them, and exports the notation', async ({ page }) => {
