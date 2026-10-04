@@ -93,6 +93,60 @@ describe('ChessViewer controlled API', () => {
     expect(screen.getByRole('button', { name: '2. Jf3' })).toHaveTextContent('Jf3');
   });
 
+  it('navigates with arrow keys after focusing moves, disclosures, and toolbar controls', () => {
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5 2. Nc3) 2. Nf3 *" /></ThemeProvider>);
+    const move = screen.getByRole('button', { name: '1... c5' });
+    fireEvent.click(move); move.focus();
+    fireEvent.keyDown(move, { key: 'ArrowLeft' });
+    expect(screen.getByRole('button', { name: '1. e4' })).toHaveAttribute('aria-current', 'step');
+    expect(move).toHaveFocus();
+    fireEvent.keyDown(move, { key: 'ArrowRight' });
+    expect(move).toHaveAttribute('aria-current', 'step');
+    const disclosure = screen.getByRole('button', { name: i18n.t('chessboard.toggleVariation', { move: '1... c5' }) });
+    disclosure.focus();
+    fireEvent.keyDown(disclosure, { key: 'ArrowRight' });
+    expect(screen.getByRole('button', { name: '2. Nc3' })).toHaveAttribute('aria-current', 'step');
+    expect(disclosure).toHaveFocus();
+    const previous = screen.getByRole('button', { name: i18n.t('chessboard.prevMove') });
+    previous.focus();
+    fireEvent.keyDown(previous, { key: 'ArrowUp' });
+    const board = screen.getByRole('region', { name: i18n.t('chessboard.boardRegion') });
+    expect(board).toHaveFocus();
+    expect(previous).toBeDisabled();
+    fireEvent.keyDown(board, { key: 'ArrowRight' });
+    expect(screen.getByRole('button', { name: '1. e4' })).toHaveAttribute('aria-current', 'step');
+    fireEvent.keyDown(board, { key: 'ArrowDown' });
+    expect(screen.getByRole('button', { name: '2. Nc3' })).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('routes portaled keyboard navigation only to its own viewer and leaves editors alone', () => {
+    const portal = document.createElement('div');
+    document.body.appendChild(portal);
+    const firstState = vi.fn();
+    const secondState = vi.fn();
+    render(<ThemeProvider>
+      <ChessViewer pgn="1. e4 e5 *" onStateChange={firstState} />
+      <ChessViewer pgn="1. d4 d5 *" onStateChange={secondState} notationTarget={portal} />
+      <textarea aria-label="Other notation" />
+      <div contentEditable aria-label="Article editor" />
+      <button type="button">Outside button</button>
+    </ThemeProvider>);
+    const move = screen.getByRole('button', { name: '1... d5' });
+    fireEvent.click(move); move.focus();
+    fireEvent.keyDown(move, { key: 'ArrowLeft' });
+    expect(lastState(firstState).ply).toBe(0);
+    expect(lastState(secondState).ply).toBe(1);
+    fireEvent.keyDown(move, { key: 'ArrowRight', ctrlKey: true });
+    expect(lastState(secondState).ply).toBe(1);
+    for (const control of [screen.getByLabelText('Other notation'), screen.getByLabelText('Article editor'), screen.getByRole('button', { name: 'Outside button' })]) {
+      control.focus();
+      expect(fireEvent.keyDown(control, { key: 'ArrowRight' })).toBe(true);
+      expect(lastState(firstState).ply).toBe(0);
+      expect(lastState(secondState).ply).toBe(1);
+    }
+    portal.remove();
+  });
+
   it('counts the selected continuation instead of the mainline', () => {
     render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5 2. Nf3 Nc6 3. d4) 2. Nf3 *" /></ThemeProvider>);
     expect(screen.getByText('0 / 3')).toBeInTheDocument();

@@ -207,10 +207,15 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
   useEffect(() => {
     if (!keyboardNavigationEnabled) return;
     const handle = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
-      if (event.target instanceof HTMLElement && event.target.closest('a[href],button,input,textarea,select,[role="link"],[role="button"],[contenteditable="true"]')) return;
+      if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const owner = target?.closest('[data-chess-viewer]');
+      if (owner && owner.getAttribute('data-chess-viewer') !== id) return;
+      if (target?.closest('a[href],input,textarea,select,[role="link"],[role="textbox"],[contenteditable]:not([contenteditable="false"])')) return;
+      if (!owner && target?.closest('button,[role="button"]')) return;
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
       event.preventDefault();
+      if (owner && target?.closest('[role="toolbar"]')) boardContainer.current?.focus({ preventScroll: true });
       if (event.key === 'ArrowLeft') previous(); else if (event.key === 'ArrowRight') next(); else if (event.key === 'ArrowUp') first(); else last();
     };
     document.addEventListener('keydown', handle);
@@ -344,7 +349,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
     </div>
   </>;
   const hasTemporary = !!temporary[selectedGame?.key ?? '']?.length;
-  return <div className="flex w-full min-w-0 max-w-full flex-col items-center rounded-2xl border border-slate-200 bg-white p-4 shadow-md dark:border-slate-800 dark:bg-slate-900">
+  return <div data-chess-viewer={id} className="flex w-full min-w-0 max-w-full flex-col items-center rounded-2xl border border-slate-200 bg-white p-4 shadow-md dark:border-slate-800 dark:bg-slate-900">
     <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 text-xs">
       {isAnalyzing ? <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"><Sparkles className="h-3.5 w-3.5" /><span>{t('chessboard.interactiveMode')}</span></div>
         : <span className="font-mono text-[11px] text-slate-500">{!path.length ? t('chessboard.initialPosition') : `${t('chessboard.move')} ${formatMoveNumber(path.length, selectedGame?.startFen).replace(/\.+$/, '')}`}</span>}
@@ -361,6 +366,6 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
     </div>
     <div className="mt-2.5 min-h-12 w-full text-center"><p className="text-[11px] text-slate-500">{t('chessboard.dragDropHint')}</p><p id={`${id}-keyboard-hint`} className="sr-only">{t('chessboard.keyboardNavigationHint')}</p></div>
     {navigation(notationTarget ? 'flex lg:hidden' : 'flex')}
-    {notationTarget ? createPortal(<div className="min-w-0">{notation}{navigation('hidden lg:flex')}</div>, notationTarget) : <div className="w-full min-w-0">{notation}</div>}
+    {notationTarget ? createPortal(<div data-chess-viewer={id} className="min-w-0">{notation}{navigation('hidden lg:flex')}</div>, notationTarget) : <div className="w-full min-w-0">{notation}</div>}
   </div>;
 };

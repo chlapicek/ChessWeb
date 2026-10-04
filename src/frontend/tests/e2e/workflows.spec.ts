@@ -19,6 +19,10 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 
     expect(alternative!.x).toBeGreaterThan(white!.x);
     await page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ }).click();
     await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('button', { name: '1... c5', exact: true })).toHaveAttribute('aria-current', 'step');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
     const disclosure = page.getByRole('button', { name: /(?:expand or collapse variation|rozbalit nebo sbalit variantu) 1\.\.\. c5/i });
     await disclosure.click();
     await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
@@ -32,7 +36,6 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 
     await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
     const board = page.getByRole('region', { name: /chessboard\.|šachovnice\./i });
-    await board.focus();
     await page.keyboard.press('ArrowLeft');
     await expect(page.getByRole('button', { name: '1... c5', exact: true })).toHaveAttribute('aria-current', 'step');
     await page.keyboard.press('ArrowRight');
@@ -98,8 +101,16 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 
     await page.getByRole('button', { name: /import pgn|importovat pgn/i }).click();
     await page.getByRole('button', { name: '1... c5', exact: true }).click();
     await expect(page.getByText('2 / 5', { exact: true }).filter({ visible: true })).toBeVisible();
-    await board.focus();
+    await page.getByRole('button', { name: /next move|následující tah/i }).filter({ visible: true }).focus();
     await page.keyboard.press('ArrowDown');
+    await expect(page.getByText('5 / 5', { exact: true }).filter({ visible: true })).toBeVisible();
+    await expect(board).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByText('4 / 5', { exact: true }).filter({ visible: true })).toBeVisible();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByText('5 / 5', { exact: true }).filter({ visible: true })).toBeVisible();
+    await notation.focus();
+    await page.keyboard.press('ArrowLeft');
     await expect(page.getByText('5 / 5', { exact: true }).filter({ visible: true })).toBeVisible();
     await notation.fill('[SetUp "1"]\n[FEN "8/8/8/8/8/8/8/K1k5 b - - 0 30"]\n\n30... Kd2 31. Ka2 *');
     await page.getByRole('button', { name: /import pgn|importovat pgn/i }).click();
