@@ -114,7 +114,6 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
   const positionFen = currentNode?.fen ?? new Chess().fen();
   const isMainline = isMainlinePath(path);
   const isAnalyzing = (temporary[selectedGame?.key ?? ''] ?? []).some((anchor) => anchor.every((index, depth) => path[depth] === index));
-  const history = selectedGame?.history ?? [];
   const atMainlineEnd = isMainline && !isAnalyzing && !currentNode?.children.length;
 
   const selectPath = (nextPath: NodePath, gameIndex = activeGame) => {
@@ -201,11 +200,10 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
   const first = () => selectPath([]);
   const previous = () => selectPath(path.slice(0, -1));
   const next = () => { if (currentNode?.children.length) selectPath([...path, nextChild(path)]); };
-  const last = () => {
-    const leaf = [...path];
-    while (selectedGame && nodeAt(selectedGame.tree, leaf)?.children.length) leaf.push(nextChild(leaf));
-    selectPath(leaf);
-  };
+  const continuation = [...path];
+  while (selectedGame && nodeAt(selectedGame.tree, continuation)?.children.length) continuation.push(nextChild(continuation));
+  const continuationLength = continuation.length;
+  const last = () => selectPath(continuation);
   useEffect(() => {
     if (!keyboardNavigationEnabled) return;
     const handle = (event: KeyboardEvent) => {
@@ -277,22 +275,7 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
   const annotationCount = (node: PgnNode): number => node.comments.length + node.startingComments.length + node.children.reduce((sum, child) => sum + annotationCount(child), 0);
   const notesCount = selectedGame ? annotationCount(selectedGame.tree.root) : 0;
   const renderNotes = (notes: string[]) => notes.length > 0 && <div className="my-0.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] border-l-2 border-emerald-500/50 px-2 py-1 font-sans text-slate-600 dark:text-slate-300">{notes.map((note, index) => <p key={index}>{formatAnnotationText(note)}</p>)}</div>;
-  const renderLine = (parent: PgnNode, parentPath: NodePath, childIndex = 0, depth = 0): React.ReactNode => {
-    const node = parent.children[childIndex];
-    if (!node) return null;
-    const nodePath = [...parentPath, childIndex];
-    const key = `${selectedGame?.key}:${pathKey(nodePath)}`;
-    const active = pathKey(path) === pathKey(nodePath);
-    const label = formatMoveLabel(nodePath.length, node.san!, pieceLetters, selectedGame?.startFen);
-    return <React.Fragment key={key}>
-      <div className="min-w-0" style={{ paddingLeft: Math.min(depth, 3) * 12 }}>
-        {renderNotes(node.startingComments)}
-        <button type="button" onClick={() => selectPath(nodePath)} aria-label={label} aria-current={active ? 'step' : undefined}
-          className={`max-w-full rounded border-l-2 px-1.5 py-0.5 text-left focus-visible:ring-2 focus-visible:ring-emerald-500 ${active ? 'border-emerald-500 bg-emerald-500/15 font-bold text-emerald-700 dark:text-emerald-300' : `border-transparent hover:bg-slate-200 dark:hover:bg-slate-800 ${depth === 0 ? 'font-semibold' : 'text-slate-500 dark:text-slate-400'}`}`}>
-          {label}{node.nags.length > 0 && <span className="ml-1 font-normal">{node.nags.join(' ')}</span>}
-        </button>{renderNotes(node.comments)}
-      </div>
-      {childIndex === 0 && parent.children.slice(1).map((alternative, index) => {
+  const renderAlternatives = (parent: PgnNode, parentPath: NodePath, depth: number) => parent.children.slice(1).map((alternative, index) => {
         const alternativePath = [...parentPath, index + 1];
         const alternativeKey = `${selectedGame?.key}:${pathKey(alternativePath)}`;
         const expanded = !collapsed.has(alternativeKey);
@@ -304,13 +287,47 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
             {!expanded && <span className="ml-1 text-xs">{formatMoveLabel(alternativePath.length, alternative.san!, pieceLetters, selectedGame?.startFen)}</span>}
           </button>{expanded && renderLine(parent, parentPath, index + 1, depth + 1)}
         </div>;
-      })}{renderLine(node, nodePath, 0, depth)}
+      });
+  const renderMove = (node: PgnNode, nodePath: NodePath, depth: number, column: number) => {
+    const active = pathKey(path) === pathKey(nodePath);
+    const label = formatMoveLabel(nodePath.length, node.san!, pieceLetters, selectedGame?.startFen);
+    return <button type="button" onClick={() => selectPath(nodePath)} aria-label={label} aria-current={active ? 'step' : undefined}
+      style={{ gridColumn: column }}
+      className={`min-w-0 w-full break-words rounded border-l-2 px-1.5 py-0.5 text-left focus-visible:ring-2 focus-visible:ring-emerald-500 ${active ? 'border-emerald-500 bg-emerald-500/15 font-bold text-emerald-700 dark:text-emerald-300' : `border-transparent hover:bg-slate-200 dark:hover:bg-slate-800 ${depth === 0 ? 'font-semibold' : 'text-slate-500 dark:text-slate-400'}`}`}>
+      {localizeSan(node.san!, pieceLetters)}{node.nags.length > 0 && <span className="ml-1 font-normal">{node.nags.join(' ')}</span>}
+    </button>;
+  };
+  const renderLine = (parent: PgnNode, parentPath: NodePath, childIndex = 0, depth = 0): React.ReactNode => {
+    const node = parent.children[childIndex];
+    if (!node) return null;
+    const nodePath = [...parentPath, childIndex];
+    const key = `${selectedGame?.key}:${pathKey(nodePath)}`;
+    const fields = parent.fen.split(' ');
+    const whiteMove = fields[1] === 'w';
+    const canPairReply = whiteMove && (childIndex !== 0 || parent.children.length === 1) && !node.comments.length
+      && !node.children[0]?.startingComments.length;
+    const paired = canPairReply ? node.children[0] : undefined;
+    const endNode = paired ?? node;
+    const endPath = paired ? [...nodePath, 0] : nodePath;
+    return <React.Fragment key={key}>
+      <div className="min-w-0" style={{ paddingLeft: Math.min(depth, 3) * 12 }}>
+        {renderNotes(node.startingComments)}
+        <div className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-2">
+          <span className="py-0.5 text-right font-mono text-slate-400">{fields[5]}{whiteMove ? '.' : '...'}</span>
+          {renderMove(node, nodePath, depth, whiteMove ? 2 : 3)}
+          {paired && renderMove(paired, endPath, depth, 3)}
+        </div>
+        {renderNotes(endNode.comments)}
+      </div>
+      {childIndex === 0 && renderAlternatives(parent, parentPath, depth)}
+      {paired && renderAlternatives(node, nodePath, depth)}
+      {renderLine(endNode, endPath, 0, depth)}
     </React.Fragment>;
   };
   const navigation = (visibility: string) => <div role="toolbar" aria-label={t('chessboard.moveNavigation')} className={`${visibility} mt-3 flex w-full items-center justify-center gap-1.5`}>
     <button type="button" onClick={first} disabled={!path.length} aria-label={t('chessboard.startPosition')} title={t('chessboard.startPosition')} className="rounded-lg border p-2 disabled:opacity-40"><RotateCcw className="h-4 w-4" /></button>
     <button type="button" onClick={previous} disabled={!path.length} aria-label={t('chessboard.prevMove')} title={t('chessboard.prevMove')} className="rounded-lg border p-2 disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button>
-    <span className="min-w-16 text-center font-mono text-xs">{path.length} / {history.length}</span>
+    <span className="min-w-16 text-center font-mono text-xs">{path.length} / {continuationLength}</span>
     <button type="button" onClick={next} disabled={!currentNode?.children.length} aria-label={t('chessboard.nextMove')} title={t('chessboard.nextMove')} className="rounded-lg border p-2 disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
     <button type="button" onClick={last} disabled={!currentNode?.children.length} aria-label={t('chessboard.endGame')} title={t('chessboard.endGame')} className="rounded-lg border p-2 disabled:opacity-40"><FastForward className="h-4 w-4" /></button>
   </div>;

@@ -90,7 +90,54 @@ describe('ChessViewer controlled API', () => {
     fireEvent.keyDown(document, { key: 'ArrowDown' });
     drop('g1', 'f3');
 
-    expect(screen.getByText('2. Jf3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2. Jf3' })).toHaveTextContent('Jf3');
+  });
+
+  it('counts the selected continuation instead of the mainline', () => {
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5 2. Nf3 Nc6 3. d4) 2. Nf3 *" /></ThemeProvider>);
+    expect(screen.getByText('0 / 3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '1... c5' }));
+    expect(screen.getByText('2 / 5')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    expect(screen.getByText('5 / 5')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    expect(screen.getByText('0 / 5')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '1... e5' }));
+    expect(screen.getByText('2 / 3')).toBeInTheDocument();
+  });
+
+  it('aligns White and Black moves in separate columns, including variations', () => {
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5 2. Nf3) 2. Nf3 *" /></ThemeProvider>);
+    const white = screen.getByRole('button', { name: '1. e4' });
+    const black = screen.getByRole('button', { name: '1... e5' });
+    expect(white).toHaveStyle({ gridColumn: '2' });
+    expect(black).toHaveStyle({ gridColumn: '3' });
+    expect(white.parentElement).toBe(black.parentElement);
+    expect(screen.getByRole('button', { name: '1... c5' })).toHaveStyle({ gridColumn: '3' });
+    screen.getAllByRole('button', { name: '2. Nf3' }).forEach((move) => expect(move).toHaveStyle({ gridColumn: '2' }));
+  });
+
+  it('counts shorter variations, temporary analysis, and undone additions', () => {
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5) 2. Nf3 Nc6 *" /></ThemeProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '1... c5' }));
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    drop('g1', 'f3');
+    expect(screen.getByText('3 / 3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('chessboard.undoAddition') }));
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '2... Nc6' }));
+    expect(screen.getByText('4 / 4')).toBeInTheDocument();
+  });
+
+  it('leaves the White column empty for a Black-to-move FEN', () => {
+    render(<ThemeProvider><ChessViewer pgn={'[SetUp "1"]\n[FEN "8/8/8/8/8/8/8/K1k5 b - - 0 30"]\n\n30... Kd2 31. Ka2 *'} /></ThemeProvider>);
+    const black = screen.getByRole('button', { name: '30... Kd2' });
+    const white = screen.getByRole('button', { name: '31. Ka2' });
+    expect(black).toHaveStyle({ gridColumn: '3' });
+    expect(white).toHaveStyle({ gridColumn: '2' });
+    expect(black.parentElement).not.toBe(white.parentElement);
+    expect(screen.getByText('30...')).toBeInTheDocument();
+    expect(screen.getByText('31.')).toBeInTheDocument();
   });
 
   it('edit mode rewrites the line and reports the new PGN', () => {

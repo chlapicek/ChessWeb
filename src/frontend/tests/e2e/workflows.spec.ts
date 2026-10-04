@@ -10,6 +10,13 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 
     const notation = page.locator('#pgn-notation');
     await notation.fill(source);
     await page.getByRole('button', { name: /import pgn|importovat pgn/i }).click();
+    const white = await page.getByRole('button', { name: '1. e4', exact: true }).boundingBox();
+    const black = await page.getByRole('button', { name: '1... e5', exact: true }).boundingBox();
+    const alternative = await page.getByRole('button', { name: '1... c5', exact: true }).boundingBox();
+    expect(white).not.toBeNull(); expect(black).not.toBeNull(); expect(alternative).not.toBeNull();
+    expect(black!.x).toBeGreaterThan(white!.x + white!.width - 1);
+    expect(black!.y).toBeCloseTo(white!.y, 0);
+    expect(alternative!.x).toBeGreaterThan(white!.x);
     await page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ }).click();
     await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
     const board = page.getByRole('region', { name: /chessboard\.|šachovnice\./i });
@@ -75,6 +82,22 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 
       expect(metrics.scroll).toBeLessThanOrEqual(metrics.client + 1);
     }
     await page.screenshot({ path: testInfo.outputPath(`nested-${viewport.width}.png`), fullPage: true });
+    await notation.fill('1. e4 e5 (1... c5 2. Nf3 Nc6 3. d4) 2. Nf3 *');
+    await page.getByRole('button', { name: /import pgn|importovat pgn/i }).click();
+    await page.getByRole('button', { name: '1... c5', exact: true }).click();
+    await expect(page.getByText('2 / 5', { exact: true }).filter({ visible: true })).toBeVisible();
+    await board.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByText('5 / 5', { exact: true }).filter({ visible: true })).toBeVisible();
+    await notation.fill('[SetUp "1"]\n[FEN "8/8/8/8/8/8/8/K1k5 b - - 0 30"]\n\n30... Kd2 31. Ka2 *');
+    await page.getByRole('button', { name: /import pgn|importovat pgn/i }).click();
+    const blackStart = page.getByRole('button', { name: /^30\.\.\. (Kd2|Kd2)$/ });
+    const whiteReply = page.getByRole('button', { name: /^31\. (Ka2|Ka2)$/ });
+    await expect(blackStart).toBeVisible();
+    const blackStartBounds = await blackStart.boundingBox();
+    const whiteReplyBounds = await whiteReply.boundingBox();
+    expect(blackStartBounds!.x).toBeGreaterThan(whiteReplyBounds!.x);
+    await page.screenshot({ path: testInfo.outputPath(`black-start-${viewport.width}.png`), fullPage: true });
   });
 }
 
