@@ -14,11 +14,22 @@ public class RequestLoggingMiddleware
         _logger = logger;
     }
 
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Replace("\r", "").Replace("\n", "");
+    }
+
     public async Task InvokeAsync(HttpContext context)
     {
         var stopwatch = Stopwatch.StartNew();
         var request = context.Request;
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+        var sanitizedPath = SanitizeForLog(request.Path.ToString());
 
         try
         {
@@ -31,7 +42,7 @@ public class RequestLoggingMiddleware
             _logger.LogInformation(
                 "[HTTP] {Method} {Path} responded {StatusCode} in {ElapsedMilliseconds} ms (User: {UserId}, IP: {IP})",
                 request.Method,
-                request.Path,
+                sanitizedPath,
                 statusCode,
                 stopwatch.ElapsedMilliseconds,
                 userId,
@@ -45,7 +56,7 @@ public class RequestLoggingMiddleware
                 ex,
                 "[HTTP ERROR] {Method} {Path} failed after {ElapsedMilliseconds} ms (IP: {IP})",
                 request.Method,
-                request.Path,
+                sanitizedPath,
                 stopwatch.ElapsedMilliseconds,
                 ip
             );
