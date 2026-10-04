@@ -117,6 +117,36 @@ describe('ChessViewer controlled API', () => {
     screen.getAllByRole('button', { name: '2. Nf3' }).forEach((move) => expect(move).toHaveStyle({ gridColumn: '2' }));
   });
 
+  it('fully hides collapsed variations and preserves nested disclosure state and selection', () => {
+    render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5 { Sicilian note } 2. Nf3 (2. Nc3 { Nested note })) 2. Nf3 *" /></ThemeProvider>);
+    const outerLabel = i18n.t('chessboard.toggleVariation', { move: '1... c5' });
+    const innerLabel = i18n.t('chessboard.toggleVariation', { move: '2. Nc3' });
+    fireEvent.click(screen.getByRole('button', { name: '2. Nc3' }));
+    const position = screen.getByTestId('board').getAttribute('data-position');
+    fireEvent.click(screen.getByRole('button', { name: innerLabel }));
+    expect(screen.queryByRole('button', { name: '2. Nc3' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Nested note')).not.toBeInTheDocument();
+    const outer = screen.getByRole('button', { name: outerLabel });
+    fireEvent.click(outer);
+    expect(outer).toHaveAttribute('aria-expanded', 'false');
+    expect(outer).toHaveTextContent('');
+    expect(outer.parentElement).not.toHaveClass('border-l');
+    expect(screen.queryByText('1... c5')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '1... c5' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: innerLabel })).not.toBeInTheDocument();
+    expect(screen.queryByText('Sicilian note')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1... e5' })).toBeInTheDocument();
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', position);
+    fireEvent.click(outer);
+    expect(screen.getByRole('button', { name: innerLabel })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Sicilian note')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '2. Nc3' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: innerLabel }));
+    expect(screen.getByRole('button', { name: '2. Nc3' })).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('Nested note')).toBeInTheDocument();
+    expect(screen.getByTestId('board')).toHaveAttribute('data-position', position);
+  });
+
   it('counts shorter variations, temporary analysis, and undone additions', () => {
     render(<ThemeProvider><ChessViewer pgn="1. e4 e5 (1... c5) 2. Nf3 Nc6 *" /></ThemeProvider>);
     fireEvent.click(screen.getByRole('button', { name: '1... c5' }));

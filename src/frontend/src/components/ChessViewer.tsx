@@ -279,12 +279,11 @@ export const ChessViewer: React.FC<ChessViewerProps> = ({
         const alternativePath = [...parentPath, index + 1];
         const alternativeKey = `${selectedGame?.key}:${pathKey(alternativePath)}`;
         const expanded = !collapsed.has(alternativeKey);
-        return <div key={alternativeKey} className="min-w-0 border-l border-slate-300 dark:border-slate-700">
+        return <div key={alternativeKey} className={`min-w-0 ${expanded ? 'border-l border-slate-300 dark:border-slate-700' : ''}`}>
           <button type="button" aria-expanded={expanded} aria-label={t('chessboard.toggleVariation', { move: formatMoveLabel(alternativePath.length, alternative.san!, pieceLetters, selectedGame?.startFen) })}
             onClick={() => setCollapsed((value) => { const copy = new Set(value); if (expanded) copy.add(alternativeKey); else copy.delete(alternativeKey); return copy; })}
-            className="p-1 focus-visible:ring-2 focus-visible:ring-emerald-500" title={t('chessboard.variation')}>
+            className="inline-flex h-6 w-6 items-center justify-center focus-visible:ring-2 focus-visible:ring-emerald-500" title={t('chessboard.variation')}>
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {!expanded && <span className="ml-1 text-xs">{formatMoveLabel(alternativePath.length, alternative.san!, pieceLetters, selectedGame?.startFen)}</span>}
           </button>{expanded && renderLine(parent, parentPath, index + 1, depth + 1)}
         </div>;
       });

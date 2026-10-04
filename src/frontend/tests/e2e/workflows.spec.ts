@@ -19,6 +19,18 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 
     expect(alternative!.x).toBeGreaterThan(white!.x);
     await page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ }).click();
     await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
+    const disclosure = page.getByRole('button', { name: /(?:expand or collapse variation|rozbalit nebo sbalit variantu) 1\.\.\. c5/i });
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    await expect(disclosure.locator('..')).toHaveText('');
+    await expect(disclosure.locator('..')).toHaveCSS('border-left-width', '0px');
+    await expect(page.getByRole('button', { name: '1... c5', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveCount(0);
+    await expect(page.getByText('Nested note', { exact: true })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`collapsed-${viewport.width}.png`), fullPage: true });
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('button', { name: /^2\. (Nc3|Jc3)$/ })).toHaveAttribute('aria-current', 'step');
     const board = page.getByRole('region', { name: /chessboard\.|šachovnice\./i });
     await board.focus();
     await page.keyboard.press('ArrowLeft');
