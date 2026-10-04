@@ -1,60 +1,66 @@
-# ♟ ChessWeb
+# ChessWeb
 
-Full-stack chess web portal built with **ASP.NET Core (.NET 10)** and **React (TypeScript + Vite + Tailwind CSS)**.
+ChessWeb is a chess-club portal for articles and game analysis, player profiles, team availability, events, notifications, and partner listings. It is built with ASP.NET Core 10, Entity Framework Core, React 19, TypeScript, and Vite.
 
-## Features
-- 📰 **Articles & Game Analysis**: Public browsing with rich content, comments, reactions (👍, ❤️, ♟️, 💡, 🏆), owner editing, attachments, and embedded interactive chessboard (PGN/FEN).
-- **Nested PGN Variations**: Import, navigate and export complete move trees with comments, NAGs and FEN starts. Legal board moves append alternatives without replacing existing moves; undo removes only newly added moves. Article-owned PGN branches are editable, while published and linked games use temporary analysis. Studio edits can be exported or saved as a new collection, never automatically written back to a loaded collection.
-- 💬 **Community Forums**: Categorized discussions and game reviews with PGN embeds.
-- 📅 **Event Calendar**: Full month interactive grid & list view, recurring events (Daily, Weekly, Bi-Weekly, Monthly), and external iCalendar (`.ics`) / RSS synchronization.
-- 🏆 **Competitions Portal**:
-  - **Hosting Player Role**: Private venue logistics, hall access instructions, organizer contacts.
-  - **Root Player Role**: Private match board lineups, opponent tactical preparation, and captain memos.
-  - **Admin Role**: Global content moderation, user role promotion, and feed management.
-- 🌐 **Internationalization (i18n)**: Full support for Czech (`cs`) and English (`en`).
-- 🌓 **Theme Support**: Seamless Light and Dark mode switching.
-- 🧪 **Full Test Coverage**: xUnit API integration tests & Vitest UI tests.
+## Quick Start
 
-## Running the Application
+Prerequisites: .NET 10 SDK, Node.js 22.22.2 or newer supported Node 24, and npm. The local backend uses SQLite in Development; the frontend proxies `/api` to `http://localhost:8080`.
 
-### 1. Run with Docker Compose
-Set the production database and JWT signing secrets before starting Compose:
-```bash
-export MSSQL_SA_PASSWORD='replace-with-a-strong-password'
-export JWT_SIGNING_KEY='replace-with-a-long-random-key'
-docker-compose up --build
-```
+Terminal 1, from the repository root:
 
-For local development with dummy defaults and hot reload, use `docker-compose.dev.yml` instead.
-Docker Compose stores attachments through `LocalFileStorageService` in the Docker-managed `backend-uploads` named volume, mounted at `/var/lib/chessweb/uploads`. The API streams downloads rather than exposing the volume as a public directory. The volume survives container replacement, but `docker compose down -v` permanently deletes its contents; back it up separately for production data.
-
-Compose binds the plain-HTTP frontend to `127.0.0.1:3000` for a host TLS reverse proxy; the backend is not published directly. For remote or public deployments, terminate TLS at a reverse proxy before exposing the application; production antiforgery cookies are Secure and require HTTPS outside localhost.
-
-Every upload is re-encoded or content-checked and scanned by the `clamav` Compose service before it is stored. The ClamAV container needs roughly 1.5–3 GB of RAM and a few minutes on first start to download its signature database; until it is ready, uploads are refused with 503 rather than accepted unscanned.
-
-### 2. Run Locally
-
-#### Backend:
-```bash
+```powershell
 cd src/backend
-dotnet run
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --urls http://localhost:8080
 ```
 
-#### Frontend:
-```bash
+Terminal 2:
+
+```powershell
 cd src/frontend
-npm install
+npm ci --legacy-peer-deps
 npm run dev
 ```
 
-### 3. Run Test Suites
-```bash
-# Backend tests (xUnit & WebApplicationFactory)
-dotnet test tests/backend/ChessWeb.Tests.csproj
+Open <http://localhost:3000>. Development seeds sample data and demo accounts. Account names and setup options are in the [development guide](docs/development.md); never use demo accounts or development secrets in a deployed environment.
 
-# Frontend tests (Vitest)
-cd src/frontend
-npx vitest run --config vitest.config.ts
+## Build and Test
+
+From the repository root:
+
+```powershell
+dotnet build ChessWeb.slnx
+dotnet test tests/backend/ChessWeb.Tests.csproj
 ```
 
-For detailed architecture details, check [docs/architecture.md](docs/architecture.md).
+From `src/frontend`:
+
+```powershell
+npm run test:run
+npm run build
+```
+
+The frontend build includes a TypeScript check. Playwright end-to-end tests and the exact CI workflow are documented in the [development guide](docs/development.md).
+
+## Run with Docker Compose
+
+Production Compose requires `MSSQL_SA_PASSWORD` and `JWT_SIGNING_KEY` in the environment. For PowerShell:
+
+```powershell
+$env:MSSQL_SA_PASSWORD = "<strong SQL Server password>"
+$env:JWT_SIGNING_KEY = "<long random signing key>"
+docker compose up --build -d
+```
+
+The frontend is published on `127.0.0.1:3000`; terminate TLS at a trusted reverse proxy before making the service reachable remotely. Compose uses persistent SQL Server and upload volumes and a ClamAV scanner. See the [deployment guide](docs/deployment.md) before operating a real installation.
+
+## Documentation
+
+- [Architecture, features, data model, and security](docs/architecture.md)
+- [HTTP API reference](docs/api.md)
+- [Local development, configuration, and tests](docs/development.md)
+- [Docker Compose deployment and operations](docs/deployment.md)
+
+## Project Status
+
+The API currently exposes articles, calendar, game collections, logging settings, notifications, partners, players, teams, and team availability. The data model contains a Competition entity, but this checkout has no separate Forums or Competition API controller. See the [API reference](docs/api.md) for implemented routes rather than inferring endpoints from old feature notes. The TLS proxy must overwrite `X-Forwarded-For` and set `X-Forwarded-Proto`; Compose trusts only its frontend container and bridge gateway when deriving client addresses for authentication rate limits. Keep the backend private and configure equivalent explicit trusted-proxy addresses if the network topology changes.

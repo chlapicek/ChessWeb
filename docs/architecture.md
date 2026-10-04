@@ -1,107 +1,123 @@
-# ChessWeb Documentation
+# Architecture and Features
 
-Welcome to the **ChessWeb Platform** documentation. ChessWeb is a full-stack chess web portal built with **ASP.NET Core (.NET 10)** on the backend and **React (TypeScript + Vite + Tailwind CSS)** on the frontend.
+ChessWeb is a single web application composed of a React client and an ASP.NET Core JSON API. In production, Nginx serves the built client and proxies `/api` to the backend. The backend uses Entity Framework Core with SQL Server in Compose and SQLite for a local Development run.
 
----
+## System View
 
-## 1. Architecture Overview
-
-```
-ChessWeb/
-├── src/
-│   ├── backend/               # ASP.NET Core (.NET 10) REST API
-│   │   ├── Controllers/       # REST Endpoints (Auth, Articles, Forums, Calendar, Competitions)
-│   │   ├── Data/              # ApplicationDbContext & Data Seeding
-│   │   ├── Domain/            # Entities (Article, Forum, Competition, User, Role)
-│   │   ├── DTOs/              # Request/Response contracts
-│   │   ├── Services/          # JWT auth, Local file storage, iCal/RSS Sync engine
-│   │   └── Validators/        # FluentValidation rules (lengths, sizes)
-│   └── frontend/              # React 18 + TypeScript + Vite + Tailwind CSS
-│       ├── src/
-│       │   ├── components/    # Interactive ChessViewer (chess.js + react-chessboard), FileUpload, Navbar, AuthModal
-│       │   ├── context/       # AuthContext & RBAC state
-│       │   ├── views/         # ArticlesView, ForumsView, CalendarView, CompetitionsView, AdminView
-│       │   └── services/      # Axios API client with JWT interceptor
-└── tests/
-    └── backend/               # xUnit unit tests & WebApplicationFactory API integration tests
+```mermaid
+flowchart LR
+    Person[Browser user] -->|HTTPS via host proxy| Web[Nginx frontend]
+    Web -->|static client| React[React and Vite build]
+    Web -->|/api requests| Api[ASP.NET Core API]
+    Dev[Vite dev server] -->|/api proxy| Api
+    React -->|JSON, bearer token, CSRF token| Api
+    Api --> Controllers[Controllers and DTO validation]
+    Controllers --> Services[Identity, team, notification, calendar, upload services]
+    Services --> Ef[Entity Framework Core]
+    Ef --> Db[(SQL Server or SQLite)]
+    Services --> Storage[(Local attachment storage)]
+    Services --> Scanner[ClamAV when enabled]
+    Calendar[External iCalendar and RSS feeds] --> Services
 ```
 
----
+## Repository Map
 
-## 2. Key Features & Business Rules
+| Path | Responsibility |
+| --- | --- |
+| `src/backend/Controllers` | HTTP routes and request authorization |
+| `src/backend/DTOs` | API request and response records |
+| `src/backend/Domain/Entities` and `Enums` | Persisted entities and domain values |
+| `src/backend/Data` | EF Core context, startup schema initialization, and development data seeding |
+| `src/backend/Services` | JWT, local file storage, calendar synchronization, teams, and notifications |
+| `src/backend/Services/Uploads` | Content sanitization, malware scanning, rate-limit policy, and attachment rescanning |
+| `src/backend/Validators` | Request and rich-content validation |
+| `src/frontend/src/views` | Articles, board, calendar, players, profiles, team availability, notifications, settings, and admin views |
+| `src/frontend/src/services` | HTTP client and frontend service adapters |
+| `tests/backend` | xUnit and API integration tests |
+| `src/frontend/src/test` and `src/frontend/src` | Vitest setup and frontend tests |
 
-### 1. User Roles & Permission Model
-- **Anonymous Users**: Can browse and read public articles, forum discussions, competition overviews, and public calendar events.
-- **Registered Users**: Can publish articles and forum topics/replies, upload attachments within quotas.
-- **Hosting Players**: Special registered role with exclusive access to venue logistics, hall entry key notes, and organizer contact details.
-- **Root Players**: Special registered role with access to team board lineups, tactical preparation against opponent repertoires, and captain memos.
-- **Administrators**: Full system rights, ability to delete any post/article, change user roles, manage external iCal/RSS calendar sync feeds.
+The current API has no Forums controller. `Competition` exists in the domain model, but there is no separate Competition controller or competition view in this checkout. Team and team-availability workflows are implemented independently.
 
-### 2. Length & Attachment Size Quotas
-- **Articles**: Rich-text (TipTap JSON, max 50,000 characters; legacy plain text max 30,000). Up to 10 attachments per article (max 5 MB per file: JPG, PNG, GIF, WebP, PDF, PGN, or TXT). Images, files, positions, games and move references can be embedded inline; the server validates the document against an allowlist.
-- **Comments**: Max 5,000 characters, paginated, editable by their author, with reactions. The article author or an administrator can lock comments; when locked only they can still comment.
-- **Enforcement**: Validated on both client side and backend (`FluentValidation` + the configured file-storage service).
+## Request and Security Flow
 
-### Attachment Storage
- Attachments use local storage through `FileStorage:Provider=Local`. The application fails fast for unsupported provider values.
- Existing objects from a previous S3 deployment must be copied into the named volume and verified before deploying this local-only configuration; the application does not migrate them automatically.
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Client as React API client
+    participant Api as ASP.NET Core middleware
+    participant Controller
+    participant Service
+    participant Db as EF Core and database
 
-### Upload Security Pipeline
-- **Sanitizing** (`UploadSanitizer`, SkiaSharp): images are identified before decoding (content must match the extension, max 25 MP), only the first frame is decoded, auto-oriented, downscaled to 2048 px and re-encoded into a fresh file, which drops EXIF/ICC/XMP/comments and appended data. GIFs are stored as static PNGs because Skia cannot write GIF. PDFs must start with `%PDF-`; `.txt`/`.pgn` must be valid UTF-8 without NUL bytes. Content types are always set by the server.
-- **Malware scanning** (`ClamAvMalwareScanner`): every upload is streamed to clamd (`ClamAv:*` settings, Compose service `clamav`, signatures refreshed hourly). Uploads fail closed with 503 while the scanner is unavailable. Development runs without a scanner (`ClamAv:Enabled=false`).
-- **Rescanning** (`AttachmentRescanService`): stored article attachments are rescanned every `ClamAv:RescanIntervalHours` (default 24) with the latest signatures; detections are quarantined and never served again. Partner logos are not rescanned, and files uploaded before this pipeline existed are rescanned but not re-encoded.
-- **Rate limiting**: upload endpoints allow `Uploads:RateLimitPerMinute` requests per user (default 20).
-
-### 3. Interactive Chessboard & PGN Viewer
-- Articles and forum posts can embed PGN or FEN games.
-- Interactive playback controls: First, Previous, Next, Last, Flip board, and move timeline buttons.
-
-### 4. Event Calendar & Recurrence Engine
-- External calendar feeds support both **iCalendar (`.ics`)** and **RSS feeds**.
-- Automatic categorization of events (Tournaments, League Matches, Club Nights, Seminars).
-- **Recurring Events**: Support for recurring schedules (Daily, Weekly, Bi-Weekly, Monthly) with occurrence limits or until-dates, linked by `RecurrenceGroupId`.
-- Granular deletion options: Delete single occurrence vs. delete entire recurring series.
-
-### 5. Internationalization, Pagination & Theme Support
-- Full Czech (`cs`) and English (`en`) localization with persistent state.
-- Light and Dark mode theme switcher with persistence in `localStorage`.
-- **Reusable Pagination Component**: Integrated into Articles (5/page), Forum Topics (8/page), Forum Thread Replies (10/page), and Admin Member Management (5/page) for responsive navigation.
-
----
-
-## 3. Getting Started
-
-### Local Development
-
-#### Backend (.NET 10):
-```bash
-cd src/backend
-dotnet run
-```
-API endpoints available at `http://localhost:8080/api`.
-
-#### Frontend (Vite):
-```bash
-cd src/frontend
-npm install
-npm run dev
-```
-Frontend runs at `http://localhost:3000`.
-
-### Running Tests
-
-#### Backend Tests (Unit + Integration):
-```bash
-dotnet test tests/backend/ChessWeb.Tests.csproj
+    Browser->>Client: UI action
+    Client->>Api: GET /api/csrf/token (for unsafe request)
+    Api-->>Client: antiforgery cookie and request token
+    Client->>Api: HTTP request with bearer token and X-CSRF-TOKEN
+    Api->>Api: security headers, exception handling, request logging, CORS, CSRF, authentication, authorization
+    Api->>Controller: route and bind request
+    Controller->>Service: validate permission and perform operation
+    Service->>Db: query or update
+    Db-->>Service: result
+    Service-->>Controller: result
+    Controller-->>Client: JSON or streamed file
 ```
 
-#### Frontend Tests (Vitest + Testing Library):
-```bash
-cd src/frontend
-npx vitest run --config vitest.config.ts
+The frontend stores the JWT in `localStorage` under `chessweb_token` and attaches it as a bearer token. The API client obtains an antiforgery request token and sends it in `X-CSRF-TOKEN` for POST, PUT, PATCH, and DELETE requests; a cookie accompanies those requests. The backend configures the antiforgery cookie as `Secure` and `SameSite=None` outside Development. Public deployments therefore require HTTPS.
+
+Authorization is implemented at both controller and action level. Many writes also check resource ownership or team membership in action logic; a signed-in user is not automatically allowed to modify another user's content. The defined role names are `RegisteredUser`, `ClubMember`, `Admin`, and `SuperAdmin`. Admin-only operations include team administration, partner management, calendar-feed management, and user role administration. Runtime logging settings are SuperAdmin-only. Consult the [API reference](api.md) for route-specific access notes.
+
+Identity requires passwords to be at least 15 characters; the current configuration does not require particular digit, case, or punctuation classes. Login and registration are rate-limited by the request IP observed by the API, with default limits of 5 and 3 requests per minute respectively. Development appsettings raises both limits for local testing. JWT signing keys must contain at least 32 UTF-8 bytes. Token lifetime is configured through `Jwt:DurationInMinutes`, restricted to 60-120 minutes, and defaults to 60 minutes.
+
+## Main Domain Areas
+
+```mermaid
+erDiagram
+    APPLICATION_USER ||--o{ ARTICLE : writes
+    ARTICLE ||--o{ ARTICLE_COMMENT : has
+    ARTICLE ||--o{ ATTACHMENT : owns
+    ARTICLE ||--o{ ARTICLE_REACTION : receives
+    ARTICLE_COMMENT ||--o{ ARTICLE_COMMENT_REACTION : receives
+    APPLICATION_USER ||--o{ GAME_COLLECTION : creates
+    GAME_COLLECTION ||--o{ GAME_COLLECTION_GAME : contains
+    ARTICLE }o--o| GAME_COLLECTION : references
+    TEAM ||--o{ TEAM_MEMBERSHIP : has
+    APPLICATION_USER ||--o{ TEAM_MEMBERSHIP : joins
+    TEAM ||--o{ TEAM_AVAILABILITY_DATE : schedules
+    TEAM ||--o{ TEAM_AVAILABILITY_PLAYER : lists
+    TEAM ||--o{ TEAM_AVAILABILITY_ENTRY : tracks
+    CALENDAR_EVENT ||--o{ EVENT_SUBSCRIPTION : subscribed
+    NOTIFICATION ||--o{ NOTIFICATION_RECIPIENT : delivered_to
 ```
 
-### Pre-seeded Demo Credentials
-- **Admin**: `admin@chessweb.local` / `Admin123!#`
-- **Root Player**: `rootplayer@chessweb.local` / `Player123!#`
-- **Hosting Player**: `hostplayer@chessweb.local` / `Player123!#`
+The primary persisted areas are:
+
+- **Articles and analysis:** article content can be plain text or validated rich-content JSON. Articles can include PGN/FEN data, reactions, paginated comments, and uploaded attachments. A game collection can be linked to an article without being deleted when the article is removed.
+- **Game collections:** an authenticated owner manages an ordered list of PGN games and can export a collection. Editing in the frontend's analysis tools does not silently write back to a loaded collection.
+- **Calendar:** events can be recurring and grouped into a series. Admin-managed iCalendar/RSS feeds synchronize event data. Users can subscribe to individual events or a series and export `.ics` data.
+- **Teams:** team memberships, captains, season dates, match dates, roster players, availability entries, and season reports support club team coordination. Team-level access is checked in the API.
+- **Notifications:** notifications are stored with recipient rows so each recipient has independent read state.
+- **Partners and logging:** partner records and logos are managed separately from articles. A persisted logging setting controls the Serilog minimum level and retention.
+
+## Upload Handling
+
+Uploads are stored by `LocalFileStorageService`; `FileStorage:Provider` accepts only `Local`. The default local path is `App_Data/Uploads`; Compose mounts a persistent volume at `/var/lib/chessweb/uploads`. Downloads are streamed through API actions rather than exposed as a public static directory.
+
+The backend accepts JPG/JPEG, PNG, GIF, WebP, PDF, PGN, and TXT files up to 5 MiB. Images are decoded and re-encoded, checked against the claimed extension, limited to 25 megapixels, and downscaled to a maximum 2048-pixel dimension. GIF input is stored as a static PNG. PDFs are signature-checked; text files must be valid UTF-8. Content types are assigned by the server. The upload request is also rate-limited by authenticated user or client address, with a default of 20 per minute.
+
+When `ClamAv:Enabled` is true, new uploads are scanned before storage. The production Compose stack enables ClamAV. Uploads fail closed while the scanner is unavailable; the attachment rescan service periodically checks stored article attachments and quarantines detections. Development appsettings disables scanning. Treat that configuration as local-only.
+
+## Validation and Limits
+
+Backend validators enforce request limits regardless of frontend checks. Current notable limits include article title 200 characters, summary 1,000, plain content 30,000, rich JSON content 50,000, PGN 15,000, FEN 150, and comment content 5,000 characters. Rich content is parsed against an allowlist, with limits on nesting depth and node count. See `src/backend/Validators` and `src/backend/Services/Uploads` for the authoritative rules.
+
+## Data Initialization and Logs
+
+At startup, `DbInitializer` calls EF Core `EnsureCreated` and applies provider-specific compatibility schema changes before seeding baseline records. Demo accounts and sample content are only enabled when `SeedDemoData=true`; startup throws if that flag is enabled outside Development. `ResetDemoAdminPassword` resets the seeded account passwords when enabled. This is not a production migration workflow: back up data before application upgrades and review initializer changes.
+
+Serilog writes to console and rolling files under `App_Data/Logs`. Retention is controlled by `Logging:RetainedFileCountLimit`; minimum level can also be updated at runtime by a SuperAdmin and is loaded from the database on restart.
+
+## Related Guides
+
+- [HTTP API reference](api.md)
+- [Development and tests](development.md)
+- [Deployment and operations](deployment.md)
