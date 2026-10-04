@@ -50,7 +50,8 @@ public class LocalFileStorageService : IFileStorageService
             var scan = await _scanner.ScanAsync(scanStream, cancellationToken);
             if (!scan.IsClean)
             {
-                _logger.LogWarning("[UPLOAD] Rejected {FileName}: malware signature {Signature}", file.FileName.ReplaceLineEndings(" "), scan.Signature);
+                var safeSignature = (scan.Signature ?? string.Empty).ReplaceLineEndings(" ");
+                _logger.LogWarning("[UPLOAD] Rejected {FileName}: malware signature {Signature}", file.FileName.ReplaceLineEndings(" "), safeSignature);
                 throw new UploadRejectedException("The file was rejected by the virus scanner.");
             }
         }
