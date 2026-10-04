@@ -161,27 +161,47 @@ public class NotificationsControllerTests : IClassFixture<WebApplicationFactory<
     }
 
     [Theory]
+    [InlineData("http://example.com")]
     [InlineData("https://example.com")]
     [InlineData("//example.com/path")]
     [InlineData("/\\\\example.com/path")]
+    [InlineData("/calendar\\schedule")]
+    [InlineData("calendar")]
+    [InlineData("?view=month")]
+    [InlineData("#schedule")]
+    [InlineData("/cal\u0000endar")]
+    [InlineData("/cal\nendar")]
     public async Task Send_RejectsUnsafeInternalLinks(string link)
     {
         var admin = await LoginAsync("admin@chessweb.local", "Admin123!#");
         var (recipient, recipientUser) = await RegisterAsync();
         var response = await admin.PostAsJsonAsync("/api/notifications", new SendNotificationRequest("Link", "Body", link, "admin", null, [recipientUser.Id], null));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var inbox = await recipient.GetFromJsonAsync<NotificationInboxDto>("/api/notifications");
+        Assert.NotNull(inbox);
+        Assert.Empty(inbox.Items);
     }
 
-    [Fact]
-    public async Task Send_AllowsSafeAppRelativeLinks()
+    [Theory]
+    [InlineData("/calendar")]
+    [InlineData("/calendar?view=month")]
+    [InlineData("/calendar#schedule")]
+    [InlineData("/")]
+    [InlineData(" /calendar ")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task Send_AllowsSafeAppRelativeLinks(string? link)
     {
         var admin = await LoginAsync("admin@chessweb.local", "Admin123!#");
         var (recipient, recipientUser) = await RegisterAsync();
-        var response = await admin.PostAsJsonAsync("/api/notifications", new SendNotificationRequest("Calendar", "Open the schedule.", "/calendar?view=month", "admin", null, [recipientUser.Id], null));
+        var response = await admin.PostAsJsonAsync("/api/notifications", new SendNotificationRequest("Calendar", "Open the schedule.", link, "admin", null, [recipientUser.Id], null));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var inbox = await recipient.GetFromJsonAsync<NotificationInboxDto>("/api/notifications");
-        Assert.Equal("/calendar?view=month", Assert.Single(inbox!.Items).InternalLink);
+        Assert.NotNull(inbox);
+        Assert.Equal(string.IsNullOrWhiteSpace(link) ? null : link.Trim(), Assert.Single(inbox.Items).InternalLink);
     }
 
     [Fact]
