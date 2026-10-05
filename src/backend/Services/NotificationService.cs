@@ -294,7 +294,7 @@ public sealed class NotificationService
 
         var value = link.Trim();
         return value.StartsWith('/') && !value.StartsWith("//", StringComparison.Ordinal) &&
-            !value.Contains('\\') && !value.Any(char.IsControl) && !Uri.TryCreate(value, UriKind.Absolute, out _);
+            !value.Contains('\\') && !value.Any(char.IsControl);
     }
 }
 
