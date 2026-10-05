@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using ChessWeb.Middleware;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,29 @@ namespace ChessWeb.Tests.Middleware;
 
 public class RequestLoggingMiddlewareTests
 {
+    [Fact]
+    public async Task ExceptionHandlingMiddleware_DoesNotExposeExceptionDetails()
+    {
+        const string secret = "internal database hostname";
+        var logger = new Mock<ILogger<ExceptionHandlingMiddleware>>();
+        var context = new DefaultHttpContext();
+        await using var responseBody = new MemoryStream();
+        context.Response.Body = responseBody;
+        var middleware = new ExceptionHandlingMiddleware(
+            _ => throw new InvalidOperationException(secret),
+            logger.Object);
+
+        await middleware.InvokeAsync(context);
+
+        responseBody.Position = 0;
+        var response = await new StreamReader(responseBody, Encoding.UTF8).ReadToEndAsync();
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+        Assert.Contains("An unexpected error occurred", response, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, response, StringComparison.Ordinal);
+        Assert.DoesNotContain("detail", response, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task InvokeAsync_SanitizesRequestValuesBeforeLogging()
     {

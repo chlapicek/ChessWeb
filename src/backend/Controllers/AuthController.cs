@@ -6,6 +6,7 @@ using ChessWeb.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ChessWeb.Controllers;
@@ -35,6 +36,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("register")]
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.RegistrationPolicyName)]
     public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
@@ -89,11 +91,12 @@ public class AuthController : ControllerBase
         var token = _jwtService.GenerateToken(user, roles);
         var userDto = new UserDto(user.Id, user.Email, user.Nickname, user.FullName, user.ChessRating, user.FideId, roles.ToList());
 
-        return Ok(new AuthResponse(token, Guid.NewGuid().ToString(), DateTime.UtcNow.AddHours(24), userDto));
+        return Ok(new AuthResponse(token.Token, Guid.NewGuid().ToString(), token.ExpiresAt, userDto));
     }
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.LoginPolicyName)]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
     {
         var user = await _userManager.FindByEmailAsync(request.EmailOrNickname);
@@ -115,7 +118,7 @@ public class AuthController : ControllerBase
         var token = _jwtService.GenerateToken(user, roles);
         var userDto = new UserDto(user.Id, user.Email!, user.Nickname, user.FullName, user.ChessRating, user.FideId, roles.ToList());
 
-        return Ok(new AuthResponse(token, Guid.NewGuid().ToString(), DateTime.UtcNow.AddHours(24), userDto));
+        return Ok(new AuthResponse(token.Token, Guid.NewGuid().ToString(), token.ExpiresAt, userDto));
     }
 
     [HttpGet("me")]

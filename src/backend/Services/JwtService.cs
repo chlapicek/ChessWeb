@@ -9,12 +9,20 @@ namespace ChessWeb.Services;
 
 public interface IJwtService
 {
-    string GenerateToken(ApplicationUser user, IEnumerable<string> roles);
+    GeneratedJwt GenerateToken(ApplicationUser user, IEnumerable<string> roles);
     ClaimsPrincipal? GetPrincipalFromToken(string token);
 }
 
+public sealed record GeneratedJwt(string Token, DateTime ExpiresAt);
+
 public class JwtService : IJwtService
 {
+    public const int MinimumSigningKeyBytes = 32;
+    public const int MinimumTokenLifetimeMinutes = 60;
+    public const int DefaultTokenLifetimeMinutes = 60;
+    public const int MaximumTokenLifetimeMinutes = 120;
+    public static readonly TimeSpan TokenClockSkew = TimeSpan.FromSeconds(30);
+
     private readonly IConfiguration _config;
 
     public JwtService(IConfiguration config)
@@ -22,23 +30,43 @@ public class JwtService : IJwtService
         _config = config;
     }
 
-    private string GetRequiredJwtKey()
+    public static byte[] GetSigningKeyBytes(string? configuredKey)
     {
-        var secretKey = _config["Jwt:Key"];
-        if (string.IsNullOrWhiteSpace(secretKey))
+        if (string.IsNullOrWhiteSpace(configuredKey))
         {
             throw new InvalidOperationException("Jwt:Key configuration is required.");
         }
 
-        return secretKey;
+        var keyBytes = Encoding.UTF8.GetBytes(configuredKey);
+        if (keyBytes.Length < MinimumSigningKeyBytes)
+        {
+            throw new InvalidOperationException($"Jwt:Key must be at least {MinimumSigningKeyBytes} UTF-8 bytes.");
+        }
+
+        return keyBytes;
     }
 
-    public string GenerateToken(ApplicationUser user, IEnumerable<string> roles)
+    public static int GetTokenLifetimeMinutes(string? configuredValue)
     {
-        var secretKey = GetRequiredJwtKey();
+        if (string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return DefaultTokenLifetimeMinutes;
+        }
+
+        if (!int.TryParse(configuredValue, out var minutes) || minutes < MinimumTokenLifetimeMinutes || minutes > MaximumTokenLifetimeMinutes)
+        {
+            throw new InvalidOperationException($"Jwt:DurationInMinutes must be between {MinimumTokenLifetimeMinutes} and {MaximumTokenLifetimeMinutes}.");
+        }
+
+        return minutes;
+    }
+
+    public GeneratedJwt GenerateToken(ApplicationUser user, IEnumerable<string> roles)
+    {
+        var keyBytes = GetSigningKeyBytes(_config["Jwt:Key"]);
         var issuer = _config["Jwt:Issuer"] ?? "ChessWebAPI";
         var audience = _config["Jwt:Audience"] ?? "ChessWebClient";
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+        var key = new SymmetricSecurityKey(keyBytes);
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new List<Claim>
@@ -55,28 +83,28 @@ public class JwtService : IJwtService
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
 
-        var expiresMinutes = double.TryParse(_config["Jwt:DurationInMinutes"], out var mins) ? mins : 1440; // 24 hours
+        var expiresAt = DateTimeOffset.FromUnixTimeSeconds(
+            DateTimeOffset.UtcNow.AddMinutes(GetTokenLifetimeMinutes(_config["Jwt:DurationInMinutes"])).ToUnixTimeSeconds()).UtcDateTime;
 
         var token = new JwtSecurityToken(
             issuer: issuer,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(expiresMinutes),
+            expires: expiresAt,
             signingCredentials: creds
         );
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return new GeneratedJwt(new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
 
     public ClaimsPrincipal? GetPrincipalFromToken(string token)
     {
-        var secretKey = GetRequiredJwtKey();
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateAudience = false,
             ValidateIssuer = false,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+            IssuerSigningKey = new SymmetricSecurityKey(GetSigningKeyBytes(_config["Jwt:Key"])),
             ValidateLifetime = false // Here we just want to inspect claims
         };
 

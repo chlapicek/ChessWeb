@@ -36,6 +36,19 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task Register_RequiresEightCharactersButNotCharacterComposition()
+    {
+        var client = _factory.CreateClient();
+        var shortPasswordResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
+            $"short-password-{Guid.NewGuid():N}@chessweb.local", "short7!", "Short Password", null, null, null));
+        var minimumPasswordResponse = await client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
+            $"minimum-password-{Guid.NewGuid():N}@chessweb.local", "password", "Minimum Password", null, null, null));
+
+        Assert.Equal(HttpStatusCode.BadRequest, shortPasswordResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, minimumPasswordResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task AnonymousUser_CanGetArticles()
     {
         var client = _factory.CreateClient();

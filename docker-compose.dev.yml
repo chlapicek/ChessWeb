@@ -19,7 +19,7 @@ services:
       dockerfile: Dockerfile
     image: chessweb-backend:dev
     ports:
-      - "0.0.0.0:8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Development
@@ -51,7 +51,7 @@ services:
       ACCEPT_EULA: Y
       SA_PASSWORD: ${MSSQL_SA_PASSWORD:-ChessWebExample_password1!}
     ports:
-      - "0.0.0.0:1433:1433"
+      - "127.0.0.1:1433:1433"
     volumes:
       - mssql-data:/var/opt/mssql
     healthcheck:

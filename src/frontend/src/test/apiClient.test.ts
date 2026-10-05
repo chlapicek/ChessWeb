@@ -1,5 +1,5 @@
 import type { AxiosAdapter } from 'axios';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '../services/apiClient';
 
 describe('apiClient CSRF protection', () => {
@@ -76,5 +76,22 @@ describe('apiClient', () => {
     await expect(errorHandler(error)).rejects.toBeTruthy();
     expect(localStorage.getItem('chessweb_token')).toBeNull();
     expect(localStorage.getItem('chessweb_user')).toBeNull();
+  });
+
+  it('does not log request or error payloads', async () => {
+    const secret = 'sensitive-request-and-response-value';
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const requestHandler = apiClient.interceptors.request.handlers?.[0]?.fulfilled as (config: any) => Promise<any>;
+    const errorHandler = apiClient.interceptors.response.handlers?.[0]?.rejected as (error: any) => Promise<unknown>;
+
+    await requestHandler({ method: 'get', url: `/test?token=${secret}`, headers: {}, params: { value: secret }, data: { value: secret } });
+    await expect(errorHandler({
+      response: { status: 400, data: { message: secret } },
+      config: { url: `/test?token=${secret}` },
+    })).rejects.toBeTruthy();
+
+    expect(debug.mock.calls.flat().join(' ')).not.toContain(secret);
+    expect(warn.mock.calls.flat().join(' ')).not.toContain(secret);
   });
 });

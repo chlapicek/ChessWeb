@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -9,6 +10,7 @@ using ChessWeb.Services;
 using ChessWeb.Services.Uploads;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -75,7 +77,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 {
     options.Password.RequireDigit = false;
-    options.Password.RequiredLength = 6;
+    options.Password.RequiredLength = 8;
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequireUppercase = false;
     options.Password.RequireLowercase = false;
@@ -86,10 +88,8 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 
 // 3. JWT Authentication & Authorization
 var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey))
-{
-    throw new InvalidOperationException("Jwt:Key configuration is required.");
-}
+var jwtKeyBytes = JwtService.GetSigningKeyBytes(jwtKey);
+JwtService.GetTokenLifetimeMinutes(builder.Configuration["Jwt:DurationInMinutes"]);
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "ChessWebAPI";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "ChessWebClient";
 
@@ -105,10 +105,11 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
+        ClockSkew = JwtService.TokenClockSkew,
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtIssuer,
         ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes)
     };
 });
 
@@ -150,19 +151,33 @@ else
 {
     builder.Services.AddSingleton<IMalwareScanner, DisabledMalwareScanner>();
 }
-builder.Services.AddHttpClient<ICalendarSyncService, CalendarSyncService>();
+builder.Services.AddSingleton<ICalendarFeedAddressResolver, CalendarFeedAddressResolver>();
+builder.Services.AddHttpClient<ICalendarFeedDownloader, CalendarFeedDownloader>()
+    .ConfigurePrimaryHttpMessageHandler(services => new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        ConnectCallback = services.GetRequiredService<ICalendarFeedAddressResolver>().ConnectAsync
+    });
 builder.Services.AddScoped<ICalendarSyncService, CalendarSyncService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddSingleton(TimeProvider.System);
 
 var uploadPermitsPerMinute = builder.Configuration.GetValue(UploadRateLimit.ConfigurationKey, UploadRateLimit.DefaultPermitsPerMinute);
+var loginPermitsPerMinute = AuthRateLimit.GetPermitLimit(builder.Configuration, AuthRateLimit.LoginConfigurationKey, AuthRateLimit.DefaultLoginPermitsPerMinute);
+var registrationPermitsPerMinute = AuthRateLimit.GetPermitLimit(builder.Configuration, AuthRateLimit.RegistrationConfigurationKey, AuthRateLimit.DefaultRegistrationPermitsPerMinute);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy(UploadRateLimit.PolicyName, context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = uploadPermitsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy(AuthRateLimit.LoginPolicyName, context => RateLimitPartition.GetFixedWindowLimiter(
+        AuthRateLimit.GetPartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = loginPermitsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy(AuthRateLimit.RegistrationPolicyName, context => RateLimitPartition.GetFixedWindowLimiter(
+        AuthRateLimit.GetPartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = registrationPermitsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 
 // 5. CORS (JWT auth remains explicit; antiforgery cookies are allowed only for configured frontend origins).
@@ -183,9 +198,34 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
+var trustedForwardedProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+if (trustedForwardedProxies.Length > 0)
+{
+    var trustedProxyAddresses = trustedForwardedProxies
+        .Select(value => IPAddress.TryParse(value, out var address)
+            ? address!
+            : throw new InvalidOperationException($"ForwardedHeaders:KnownProxies contains an invalid IP address: '{value}'."))
+        .ToArray();
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = trustedProxyAddresses.Length;
+        options.KnownProxies.Clear();
+        options.KnownIPNetworks.Clear();
+        foreach (var address in trustedProxyAddresses)
+        {
+            options.KnownProxies.Add(address);
+        }
+    });
+}
+
 var app = builder.Build();
 
 // Security headers first so they also cover error responses; then exception handling & request logging.
+if (trustedForwardedProxies.Length > 0)
+{
+    app.UseForwardedHeaders();
+}
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();

@@ -8,6 +8,9 @@ services:
     image: chessweb-frontend:dev
     ports:
       - "127.0.0.1:3000:80"
+    networks:
+      default:
+        ipv4_address: 172.30.240.2
     depends_on:
       - backend
 
@@ -23,6 +26,8 @@ services:
       - FileStorage__BasePath=/var/lib/chessweb/uploads
       - ConnectionStrings__DefaultConnection=Server=db,1433;Database=ChessWebDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD before starting Compose};TrustServerCertificate=True;
       - Jwt__Key=${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY before starting Compose}
+      - ForwardedHeaders__KnownProxies__0=172.30.240.1
+      - ForwardedHeaders__KnownProxies__1=172.30.240.2
       - ClamAv__Enabled=true
       - ClamAv__Host=clamav
     volumes:
@@ -56,3 +61,9 @@ volumes:
   backend-uploads:
   clamav-db:
   mssql-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.240.0/24

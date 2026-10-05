@@ -57,7 +57,7 @@ ASP.NET Core loads `appsettings.json`, the environment-specific appsettings file
 | `SeedDemoData`, `ResetDemoAdminPassword` | Development-only sample data and password reset behavior. |
 | `Logging:RetainedFileCountLimit` | Number of rolling log files retained. |
 
-The API fails at startup if `Jwt:Key` is empty or shorter than 32 UTF-8 bytes, if the configured token lifetime is outside 60-120 minutes, if an auth rate limit is below 1, or if a non-Local file storage provider is configured. Passwords must be at least 15 characters. Do not commit secrets to appsettings or `.env` files.
+The API fails at startup if `Jwt:Key` is empty or shorter than 32 UTF-8 bytes, if the configured token lifetime is outside 60-120 minutes, if an auth rate limit is below 1, or if a non-Local file storage provider is configured. Passwords must be at least 8 characters. Do not commit secrets to appsettings or `.env` files.
 
 ## Build and Test
 

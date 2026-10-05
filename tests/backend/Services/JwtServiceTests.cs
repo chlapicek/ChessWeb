@@ -37,11 +37,11 @@ public class JwtServiceTests
             FullName = "Player One"
         };
 
-        var token = _service.GenerateToken(user, new[] { "RootPlayer", "Admin" });
+        var generated = _service.GenerateToken(user, new[] { "RootPlayer", "Admin" });
 
-        Assert.False(string.IsNullOrWhiteSpace(token));
+        Assert.False(string.IsNullOrWhiteSpace(generated.Token));
 
-        var principal = _service.GetPrincipalFromToken(token);
+        var principal = _service.GetPrincipalFromToken(generated.Token);
         Assert.NotNull(principal);
         Assert.Equal(user.Id.ToString(), principal!.FindFirstValue(ClaimTypes.NameIdentifier));
         Assert.Equal(user.UserName, principal.FindFirstValue(ClaimTypes.Name));
@@ -70,10 +70,30 @@ public class JwtServiceTests
             FullName = "Player Two"
         };
 
-        var token = _service.GenerateToken(user, new[] { "HostingPlayer" });
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+        var generated = _service.GenerateToken(user, new[] { "HostingPlayer" });
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(generated.Token);
 
         Assert.NotNull(jwt);
+        Assert.Equal(generated.ExpiresAt, jwt.ValidTo);
         Assert.True(jwt.ValidTo > DateTime.UtcNow.AddMinutes(59));
+    }
+
+    [Fact]
+    public void GetSigningKeyBytes_RejectsShortKeys()
+    {
+        Assert.Throws<InvalidOperationException>(() => JwtService.GetSigningKeyBytes("short-key"));
+    }
+
+    [Fact]
+    public void GetTokenLifetimeMinutes_RejectsValuesOutsideTheSupportedRange()
+    {
+        Assert.Throws<InvalidOperationException>(() => JwtService.GetTokenLifetimeMinutes("1440"));
+        Assert.Equal(JwtService.DefaultTokenLifetimeMinutes, JwtService.GetTokenLifetimeMinutes(null));
+    }
+
+    [Fact]
+    public void TokenClockSkew_IsBounded()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(30), JwtService.TokenClockSkew);
     }
 }

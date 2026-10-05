@@ -278,31 +278,41 @@ public class CalendarController : ControllerBase
 
     [HttpPost("feeds/{feedId:guid}/sync")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<IActionResult> SyncSingleFeed(Guid feedId)
+    public async Task<IActionResult> SyncSingleFeed(Guid feedId, CancellationToken cancellationToken)
     {
         try
         {
-            var count = await _syncService.SyncFeedAsync(feedId);
+            var count = await _syncService.SyncFeedAsync(feedId, cancellationToken);
             return Ok(new { message = $"Synchronized successfully. Processed {count} events." });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = $"Sync failed: {ex.Message}" });
+            _logger.LogError(ex, "Calendar feed synchronization failed for {FeedId}", feedId);
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Calendar feed synchronization failed." });
         }
     }
 
     [HttpPost("sync-all")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<IActionResult> SyncAllFeeds()
+    public async Task<IActionResult> SyncAllFeeds(CancellationToken cancellationToken)
     {
         try
         {
-            var count = await _syncService.SyncAllFeedsAsync();
+            var count = await _syncService.SyncAllFeedsAsync(cancellationToken);
             return Ok(new { message = $"Synchronized all feeds successfully. Processed {count} events." });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = $"Sync failed: {ex.Message}" });
+            _logger.LogError(ex, "Calendar feed synchronization failed for all feeds");
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = "Calendar feed synchronization failed." });
         }
     }
 

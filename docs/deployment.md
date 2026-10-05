@@ -63,7 +63,7 @@ The SQL Server service has a health check and the backend waits for it to become
 ## Configuration and Security Checklist
 
 - Use unique, strong `MSSQL_SA_PASSWORD` and `JWT_SIGNING_KEY` secrets and protect them from logs and source control.
-- Keep the JWT key at least 32 UTF-8 bytes; the configured lifetime must be 60-120 minutes (60 minutes by default). The backend enforces a 15-character minimum password length without composition rules.
+- Keep the JWT key at least 32 UTF-8 bytes; the configured lifetime must be 60-120 minutes (60 minutes by default). The backend enforces an 8-character minimum password length without composition rules.
 - Keep the default per-IP login and registration limits (5 and 3 requests/minute) appropriate for the deployment. Forwarded headers are processed only from the explicit trusted-proxy addresses configured in Compose; do not trust arbitrary forwarded headers or publish the backend directly.
 - Terminate TLS at a trusted reverse proxy before allowing remote access. The Compose frontend itself serves plain HTTP on a loopback-only host binding.
 - Configure `Cors:AllowedOrigins` for the exact browser origins you serve. Keep credentialed cross-origin access restricted.

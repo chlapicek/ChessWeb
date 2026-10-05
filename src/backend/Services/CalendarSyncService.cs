@@ -1,5 +1,6 @@
 using System.Net;
 using System.ServiceModel.Syndication;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using ChessWeb.Data;
@@ -18,16 +19,16 @@ public interface ICalendarSyncService
 public class CalendarSyncService : ICalendarSyncService
 {
     private readonly ApplicationDbContext _context;
-    private readonly HttpClient _httpClient;
+    private readonly ICalendarFeedDownloader _feedDownloader;
     private readonly ILogger<CalendarSyncService> _logger;
 
     public CalendarSyncService(
         ApplicationDbContext context,
-        HttpClient httpClient,
+        ICalendarFeedDownloader feedDownloader,
         ILogger<CalendarSyncService> logger)
     {
         _context = context;
-        _httpClient = httpClient;
+        _feedDownloader = feedDownloader;
         _logger = logger;
     }
 
@@ -44,9 +45,13 @@ public class CalendarSyncService : ICalendarSyncService
             {
                 totalImported += await SyncFeedAsync(feed.Id, cancellationToken);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to sync feed {FeedName} ({Url})", feed.Name, feed.Url);
+                _logger.LogError(ex, "Failed to sync calendar feed {FeedId}", feed.Id);
             }
         }
 
@@ -64,13 +69,15 @@ public class CalendarSyncService : ICalendarSyncService
         int count = 0;
         try
         {
-            var response = await _httpClient.GetAsync(feed.Url, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            var feedContent = await _feedDownloader.DownloadAsync(feed.Url, cancellationToken);
 
             if (feed.Type == FeedType.IcsCalendar)
             {
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var calendar = global::Ical.Net.Calendar.Load(content);
+                var calendar = global::Ical.Net.Calendar.Load(Encoding.UTF8.GetString(feedContent));
+                if (calendar.Events.Count > CalendarFeedDownloader.MaxFeedItems)
+                {
+                    throw new InvalidDataException("Calendar feed contains too many items.");
+                }
 
                 foreach (var evt in calendar.Events)
                 {
@@ -92,7 +99,7 @@ public class CalendarSyncService : ICalendarSyncService
                             EndTime = endTime,
                             IsAllDay = evt.IsAllDay,
                             Category = CategorizeEvent(evt.Summary ?? ""),
-                            ExternalUrl = evt.Url?.ToString(),
+                            ExternalUrl = CleanExternalUrl(evt.Url?.ToString()),
                             ExternalUid = uid,
                             SourceFeedName = feed.Name,
                             CreatedAt = DateTime.UtcNow
@@ -113,20 +120,31 @@ public class CalendarSyncService : ICalendarSyncService
             }
             else if (feed.Type == FeedType.RssFeed)
             {
-                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                using var xmlReader = XmlReader.Create(stream);
+                using var stream = new MemoryStream(feedContent, writable: false);
+                using var xmlReader = XmlReader.Create(stream, new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Prohibit,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = CalendarFeedDownloader.MaxResponseBytes
+                });
                 var rss = SyndicationFeed.Load(xmlReader);
 
                 if (rss != null)
                 {
-                    foreach (var item in rss.Items)
+                    var items = rss.Items.Take(CalendarFeedDownloader.MaxFeedItems + 1).ToList();
+                    if (items.Count > CalendarFeedDownloader.MaxFeedItems)
+                    {
+                        throw new InvalidDataException("Calendar feed contains too many items.");
+                    }
+
+                    foreach (var item in items)
                     {
                         var uid = item.Id ?? item.Links.FirstOrDefault()?.Uri.ToString() ?? item.Title.Text;
                         var existing = await _context.CalendarEvents
                             .FirstOrDefaultAsync(e => e.ExternalUid == uid, cancellationToken);
 
                         var startTime = item.PublishDate.DateTime > DateTime.MinValue ? item.PublishDate.DateTime : DateTime.UtcNow;
-                        var link = item.Links.FirstOrDefault()?.Uri.ToString();
+                        var link = CleanExternalUrl(item.Links.FirstOrDefault()?.Uri.ToString());
 
                         if (existing == null)
                         {
@@ -161,11 +179,29 @@ public class CalendarSyncService : ICalendarSyncService
             feed.LastSyncStatus = $"Successfully imported/updated {count} events.";
             await _context.SaveChangesAsync(cancellationToken);
         }
+        catch (OperationCanceledException)
+        {
+            _context.ChangeTracker.Clear();
+            throw;
+        }
         catch (Exception ex)
         {
-            feed.LastSyncTime = DateTime.UtcNow;
-            feed.LastSyncStatus = $"Error: {ex.Message}";
-            await _context.SaveChangesAsync(cancellationToken);
+            _context.ChangeTracker.Clear();
+            _logger.LogError(ex, "Failed to sync calendar feed {FeedId}", feed.Id);
+            var failedFeed = await _context.CalendarFeeds.FindAsync([feedId], CancellationToken.None);
+            if (failedFeed != null)
+            {
+                failedFeed.LastSyncTime = DateTime.UtcNow;
+                failedFeed.LastSyncStatus = "Feed sync failed. Check server logs for details.";
+                try
+                {
+                    await _context.SaveChangesAsync(CancellationToken.None);
+                }
+                catch (Exception statusException)
+                {
+                    _logger.LogError(statusException, "Unable to persist sync status for calendar feed {FeedId}", feedId);
+                }
+            }
             throw;
         }
 
@@ -210,5 +246,17 @@ public class CalendarSyncService : ICalendarSyncService
             string.Empty,
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         return Regex.Replace(decoded, @"[ \t]+\n", "\n").Trim();
+    }
+
+    private static string? CleanExternalUrl(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return null;
+        }
+
+        return uri.AbsoluteUri;
     }
 }

@@ -30,7 +30,7 @@ Base path: `/api/auth`
 
 | Method | Path | Access | Purpose and input |
 | --- | --- | --- | --- |
-| POST | `/register` | Public | Create an account; JSON `RegisterRequest` (`Email`, `Password`, `FullName`, optional `ChessRating`, `FideId`, `Nickname`). Assigns `RegisteredUser` and returns an auth response. Passwords must be at least 15 characters. Rate-limited by request IP (default 3/minute). |
+| POST | `/register` | Public | Create an account; JSON `RegisterRequest` (`Email`, `Password`, `FullName`, optional `ChessRating`, `FideId`, `Nickname`). Assigns `RegisteredUser` and returns an auth response. Passwords must be at least 8 characters. Rate-limited by request IP (default 3/minute). |
 | POST | `/login` | Public | Sign in by email or nickname; JSON `LoginRequest` (`EmailOrNickname`, `Password`). Rate-limited by request IP (default 5/minute). |
 | GET | `/me` | Signed in | Return the current user's profile and roles. |
 | GET | `/users` | Admin or SuperAdmin | List users. |

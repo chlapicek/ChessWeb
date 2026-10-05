@@ -66,7 +66,7 @@ The frontend stores the JWT in `localStorage` under `chessweb_token` and attache
 
 Authorization is implemented at both controller and action level. Many writes also check resource ownership or team membership in action logic; a signed-in user is not automatically allowed to modify another user's content. The defined role names are `RegisteredUser`, `ClubMember`, `Admin`, and `SuperAdmin`. Admin-only operations include team administration, partner management, calendar-feed management, and user role administration. Runtime logging settings are SuperAdmin-only. Consult the [API reference](api.md) for route-specific access notes.
 
-Identity requires passwords to be at least 15 characters; the current configuration does not require particular digit, case, or punctuation classes. Login and registration are rate-limited by the request IP observed by the API, with default limits of 5 and 3 requests per minute respectively. Development appsettings raises both limits for local testing. JWT signing keys must contain at least 32 UTF-8 bytes. Token lifetime is configured through `Jwt:DurationInMinutes`, restricted to 60-120 minutes, and defaults to 60 minutes.
+Identity requires passwords to be at least 8 characters; the current configuration does not require particular digit, case, or punctuation classes. Login and registration are rate-limited by the request IP observed by the API, with default limits of 5 and 3 requests per minute respectively. Development appsettings raises both limits for local testing. JWT signing keys must contain at least 32 UTF-8 bytes. Token lifetime is configured through `Jwt:DurationInMinutes`, restricted to 60-120 minutes, and defaults to 60 minutes.
 
 ## Main Domain Areas
 
