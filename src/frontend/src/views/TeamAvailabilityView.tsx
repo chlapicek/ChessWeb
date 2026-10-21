@@ -421,8 +421,10 @@ export const TeamAvailabilityView: React.FC = () => {
                 {canManageTeam ? t(emptyState) : t('teamAvailability.memberEmptyState')}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[820px] border-separate border-spacing-0 text-sm">
+              <>
+                <p className="px-4 pt-3 text-xs text-slate-500 lg:hidden">{t('teamAvailability.matrixScrollHint')}</p>
+                <div role="region" aria-label={t('teamAvailability.title')} tabIndex={0} className="overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500">
+                  <table className="w-full min-w-[820px] border-separate border-spacing-0 text-sm">
                   <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950">
                     <tr>
                       <th scope="col" className="sticky left-0 z-20 min-w-52 border-b border-slate-200 bg-slate-50 p-3 text-left dark:border-slate-800 dark:bg-slate-950">{t('teamAvailability.playerName')}</th>
@@ -492,8 +494,9 @@ export const TeamAvailabilityView: React.FC = () => {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                  </table>
+                </div>
+              </>
             )}
           </section>
         </>

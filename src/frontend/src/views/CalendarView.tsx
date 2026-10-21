@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useId, useRef, useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/apiClient';
@@ -49,6 +49,9 @@ const cleanCalendarText = (value: string) => {
   return (document.body.textContent || '').replace(/[ \t]+\n/g, '\n').trim();
 };
 
+const isNarrowViewport = () =>
+  typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches;
+
 interface CalendarViewProps {
   subscribedOnly?: boolean;
 }
@@ -81,13 +84,28 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
   const canManageEvents = isAdmin && !subscribedOnly;
 
   // View state: 'month' (real calendar grid) or 'list' (agenda cards)
-  const [viewMode, setViewMode] = useState<'month' | 'list'>('month');
+  const [viewMode, setViewMode] = useState<'month' | 'list'>(() => isNarrowViewport() ? 'list' : 'month');
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const breakpoint = window.matchMedia('(max-width: 767px)');
+    const updateViewMode = () => setViewMode(breakpoint.matches ? 'list' : 'month');
+    breakpoint.addEventListener('change', updateViewMode);
+    return () => breakpoint.removeEventListener('change', updateViewMode);
+  }, []);
 
   // Calendar navigation state (Year & Month: 0-indexed month)
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
   // Selected event for detail popup modal
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const eventDialogTitleId = useId();
+  const eventDialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = eventDialogRef.current;
+    if (selectedEvent && dialog && !dialog.open) dialog.showModal();
+  }, [selectedEvent]);
 
   // New Event Form
   const [isAdding, setIsAdding] = useState(false);
@@ -427,7 +445,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
           )}
 
           {/* View mode toggle */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-700">
+          <div className="hidden md:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-300 dark:border-slate-700">
             <button
               onClick={() => setViewMode('month')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
@@ -638,19 +656,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
                         : '';
 
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={evt.id}
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedEvent(evt);
                           }}
-                          className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium border truncate cursor-pointer transition flex items-center gap-1 ${cfg.bg} ${cfg.text} ${cfg.border} hover:scale-[1.02] shadow-xs`}
+                          className={`min-w-0 w-full px-1.5 py-0.5 rounded-md text-left text-[10px] font-medium border truncate transition flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${cfg.bg} ${cfg.text} ${cfg.border} hover:scale-[1.02] shadow-xs`}
                           title={`${evt.title} (${timeStr || t('calendar.allDay')})`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
                           {evt.recurrenceGroupId && <span className="text-[9px] shrink-0" title={t('calendar.recurringBadge')}>🔁</span>}
                           <span className="truncate">{evt.title}</span>
-                        </div>
+                        </button>
                       );
                     })}
 
@@ -716,7 +735,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
                       </div>
 
                       <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2 leading-snug group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">
-                        {evt.title}
+                        <button type="button" onClick={() => setSelectedEvent(evt)} className="min-h-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                          {evt.title}
+                        </button>
                       </h3>
 
                       {evt.description && (
@@ -776,11 +797,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
 
       {/* EVENT DETAIL MODAL */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 dark:bg-slate-950/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl text-slate-800 dark:text-slate-100 relative transition-colors animate-scale-in">
+        <dialog
+          ref={eventDialogRef}
+          aria-labelledby={eventDialogTitleId}
+          onClose={() => setSelectedEvent(null)}
+          className="fixed inset-0 m-0 hidden h-full max-h-full w-full max-w-none items-center justify-center overflow-y-auto border-0 bg-slate-950/70 p-4 backdrop-blur-sm open:flex dark:bg-slate-950/80"
+        >
+          <div className="relative max-h-full w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-2xl transition-colors animate-scale-in dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
             <button
-              onClick={() => setSelectedEvent(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              type="button"
+              aria-label={t('common.cancel')}
+              onClick={() => eventDialogRef.current?.close()}
+              className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
@@ -803,7 +831,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
                   </span>
                 )}
               </div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
+              <h3 id={eventDialogTitleId} className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
                 {selectedEvent.title}
               </h3>
             </div>
@@ -963,7 +991,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
                 ) : null}
 
                 <button
-                  onClick={() => setSelectedEvent(null)}
+                  type="button"
+                  onClick={() => eventDialogRef.current?.close()}
                   className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-semibold transition"
                 >
                   {t('common.cancel')}
@@ -971,7 +1000,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ subscribedOnly = fal
               </div>
             </div>
           </div>
-        </div>
+        </dialog>
       )}
 
       {/* ADD EVENT MODAL (ADMIN) */}

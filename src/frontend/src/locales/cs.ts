@@ -517,6 +517,7 @@ export const cs = {
     teamMembers: 'Členové týmu',
     match: 'Zápas',
     playerName: 'Hráč',
+    matrixScrollHint: 'V tabulce dostupnosti se posuňte vodorovně pro zobrazení všech termínů zápasů.',
     status: 'Stav',
     driver: 'Řidič',
     yes: 'Ano',

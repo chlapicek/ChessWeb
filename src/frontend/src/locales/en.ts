@@ -515,6 +515,7 @@ export const en = {
     teamMembers: 'Team members',
     match: 'Match',
     playerName: 'Player',
+    matrixScrollHint: 'Scroll the availability table horizontally to see every match date.',
     status: 'Status',
     driver: 'Driver',
     yes: 'Yes',

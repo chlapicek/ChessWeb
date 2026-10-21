@@ -170,7 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
         </Link>
 
         {/* Navigation Tabs */}
-        <nav ref={desktopNavRef} className="relative mx-4 hidden min-w-0 flex-1 items-center justify-center md:flex">
+        <nav ref={desktopNavRef} className="relative mx-4 hidden min-w-0 flex-1 items-center justify-center overflow-x-clip md:flex">
           <div ref={desktopMeasureRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex w-max gap-2">
             {navItems.map((item) => (
               <span key={item.to} className={navLinkClass({ isActive: false })}>{renderDesktopItemContent(item)}</span>
@@ -264,7 +264,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenLogin }) => {
       </div>
 
       {/* Mobile navigation bar */}
-      <nav className="md:hidden relative px-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs">
+      <nav className="md:hidden relative overflow-x-clip px-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs">
         <div ref={mobileMeasureRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex w-max gap-1">
           {navItems.map((item) => (
             <span key={item.to} className={mobileNavLinkClass({ isActive: false })}>{t(item.labelKey)}</span>
